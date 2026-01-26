@@ -7,42 +7,49 @@ datasource db {
   provider = "postgresql"
 }
 
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum Role {
+  STUDENT
+  TUTOR
+  ADMIN
+}
+
 model User {
-  id            String    @id
+  id            String   @id
   name          String
-  email         String
-  emailVerified Boolean   @default(false)
+  email         String   @unique
+  emailVerified Boolean  @default(false)
   image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  sessions      Session[]
-  accounts      Account[]
+  role          Role?    @default(STUDENT)
+  phone         String?
+  status        String?  @default("ACTIVE")
+  bio           String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  role         String?       @default("STUDENT")
-  phone        String?
-  status       String?       @default("ACTIVE")
-  bio          String
   tutorProfile TutorProfile?
-  admin        Admin?
-
-  @@unique([email])
-  @@map("user")
+  bookings     Booking[]     @relation("StudentBookings")
+  reviews      Review[]      @relation("StudentReviews")
+  sessions     Session[]
+  accounts     Account[]
 }
 
 model Session {
   id        String   @id
   expiresAt DateTime
-  token     String
+  token     String   @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   ipAddress String?
   userAgent String?
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([token])
-  @@index([userId])
-  @@map("session")
 }
 
 model Account {
@@ -62,7 +69,6 @@ model Account {
   updatedAt             DateTime  @updatedAt
 
   @@index([userId])
-  @@map("account")
 }
 
 model Verification {
@@ -74,21 +80,25 @@ model Verification {
   updatedAt  DateTime @updatedAt
 
   @@index([identifier])
-  @@map("verification")
 }
 
 model TutorProfile {
-  id           String         @id @default(uuid())
-  user         User           @relation(fields: [userId], references: [id])
-  userId       String         @unique
-  subjects     String[] 
+  id           String   @id @default(uuid())
+  user         User     @relation(fields: [userId], references: [id])
+  userId       String   @unique
+  subjects     String[]
   bio          String?
   hourlyRate   Float
-  rating       Float          @default(0)
-  totalReviews Int            @default(0)
+  rating       Float    @default(0)
+  totalReviews Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
   availability Availability[]
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  bookings     Booking[]      @relation("TutorBookings")
+  category     Category?      @relation(fields: [categoryId], references: [id])
+  categoryId   String?
+  reviews      Review[]       @relation("TutorReviews")
 }
 
 model Availability {
@@ -100,11 +110,34 @@ model Availability {
   endTime   String
 }
 
-model Admin {
-  id        String   @id @default(uuid())
-  user      User     @relation(fields: [userId], references: [id])
-  userId    String   @unique
-  role      String   @default("ADMIN")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model Category {
+  id          String         @id @default(uuid())
+  name        String         @unique
+  description String?
+  tutors      TutorProfile[]
+}
+
+model Booking {
+  id          String        @id @default(uuid())
+  student     User          @relation("StudentBookings", fields: [studentId], references: [id])
+  studentId   String
+  tutor       TutorProfile  @relation("TutorBookings", fields: [tutorId], references: [id])
+  tutorId     String
+  subject     String
+  scheduledAt DateTime
+  status      BookingStatus @default(PENDING)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model Review {
+  id        String       @id @default(uuid())
+  student   User         @relation("StudentReviews", fields: [studentId], references: [id])
+  studentId String
+  tutor     TutorProfile @relation("TutorReviews", fields: [tutorId], references: [id])
+  tutorId   String
+  rating    Int          @default(5)
+  comment   String?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
 }
