@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { CategoriesRouter } from '../modules/categories/categories.route';
 import { UsersRouter } from '../modules/users/users.route';
-import { TutorsRouter } from '../modules/tutors/tutors.route';
+import { TutorsRouter } from '../modules/tutors-profile/tutors-profile.route';
 
 const router = Router();
 
