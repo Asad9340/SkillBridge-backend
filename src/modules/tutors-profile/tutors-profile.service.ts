@@ -4,6 +4,7 @@ import { prisma } from '../../../lib/prisma';
 const GetTutorProfileById = async (tutorId: string) => {
   const result = await prisma.tutorProfile.findUnique({
     where: { id: tutorId },
+    include: { availability: true },
   });
   return result;
 };
@@ -26,7 +27,7 @@ const UpdateTutorProfile = async (
   return result;
 };
 
-export const TutorsService = {
+export const TutorsProfileService = {
   GetTutorProfileById,
   CreateTutorProfile,
   UpdateTutorProfile,

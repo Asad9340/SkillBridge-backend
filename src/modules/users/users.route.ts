@@ -10,4 +10,4 @@ router.patch(
   UsersController.UpdateUserStatus,
 );
 
-export const UsersRouter = router;
+export const UsersRouters = router;

@@ -15,4 +15,4 @@ router.delete(
   CategoriesController.DeleteCategory,
 );
 
-export const CategoriesRouter = router;
+export const CategoriesRouters = router;

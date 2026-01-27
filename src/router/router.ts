@@ -1,13 +1,18 @@
 import { Router } from 'express';
-import { CategoriesRouter } from '../modules/categories/categories.route';
-import { UsersRouter } from '../modules/users/users.route';
-import { TutorsRouter } from '../modules/tutors-profile/tutors-profile.route';
+import { CategoriesRouters } from '../modules/categories/categories.route';
+import { UsersRouters } from '../modules/users/users.route';
+import { TutorsProfileRouters } from '../modules/tutors-profile/tutors-profile.route';
+import { TutorsAvailabilityRoutes } from '../modules/tutors-availability/tutors-availability.route';
 
 const router = Router();
 
-router.use('/categories', CategoriesRouter);
-router.use('/users', UsersRouter);
+router.use('/categories', CategoriesRouters);
 
-router.use('/tutors', TutorsRouter);
+router.use('/users', UsersRouters);
+
+router.use('/tutors-profile', TutorsProfileRouters);
+
+router.use('/tutors-availability', TutorsAvailabilityRoutes);
+
 
 export { router };

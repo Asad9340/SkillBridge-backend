@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { TutorsController } from './tutors-profile.controller';
+import { TutorsProfileController } from './tutors-profile.controller';
 import auth, { UserRole } from '../../middlewares/auth';
 
 const router = Router();
@@ -7,13 +7,17 @@ const router = Router();
 router.get(
   '/:tutorId',
   auth(UserRole.TUTOR),
-  TutorsController.GetTutorProfileById,
+  TutorsProfileController.GetTutorProfileById,
 );
-router.post('/', auth(UserRole.TUTOR), TutorsController.CreateTutorProfile);
+router.post(
+  '/',
+  auth(UserRole.TUTOR),
+  TutorsProfileController.CreateTutorProfile,
+);
 router.patch(
   '/:tutorId',
   auth(UserRole.TUTOR),
-  TutorsController.UpdateTutorProfile,
+  TutorsProfileController.UpdateTutorProfile,
 );
 
-export const TutorsRouter = router;
+export const TutorsProfileRouters = router;
