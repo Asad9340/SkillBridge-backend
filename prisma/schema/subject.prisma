@@ -1,0 +1,27 @@
+model Category {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  description String?
+
+  subjects Subject[]
+}
+
+model Subject {
+  id         String         @id @default(uuid())
+  name       String
+  categoryId String
+  category   Category       @relation(fields: [categoryId], references: [id])
+  tutors     TutorSubject[]
+  bookings   Booking[]
+}
+
+model TutorSubject {
+  id        String @id @default(uuid())
+  tutorId   String
+  subjectId String
+
+  tutor   TutorProfile @relation(fields: [tutorId], references: [id])
+  subject Subject      @relation(fields: [subjectId], references: [id])
+
+  @@unique([tutorId, subjectId])
+}

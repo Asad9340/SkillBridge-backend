@@ -1,0 +1,27 @@
+model TutorProfile {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id])
+  bio          String?
+  hourlyRate   Float
+  rating       Float    @default(0)
+  totalReviews Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  subjects     TutorSubject[]
+  availability Availability[]
+  bookings     Booking[]      @relation("TutorBookings")
+  reviews      Review[]       @relation("TutorReviews")
+}
+
+model Availability {
+  id        String   @id @default(uuid())
+  tutorId   String
+  date      DateTime
+  startTime String
+  endTime   String
+  isBooked  Boolean  @default(false)
+
+  tutor TutorProfile @relation(fields: [tutorId], references: [id])
+}

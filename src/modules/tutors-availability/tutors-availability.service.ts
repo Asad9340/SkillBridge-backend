@@ -1,4 +1,4 @@
-import { Availability } from '../../../generated/prisma/client';
+
 import { prisma } from '../../../lib/prisma';
 
 const GetTutorAvailabilityById = async (tutorId: string) => {
