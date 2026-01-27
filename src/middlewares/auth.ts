@@ -42,7 +42,12 @@ const auth = (...roles: UserRole[]) => {
           message: 'Email verification required. Please verify your email!',
         });
       }
-
+      if( session.user.status && session.user.status !== 'ACTIVE'){
+        return res.status(403).json({
+          success: false,
+          message: `Your account is ${session.user.status}. Please contact support!`,
+        });
+      }
       req.user = {
         id: session.user.id,
         email: session.user.email,

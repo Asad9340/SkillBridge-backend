@@ -20,18 +20,24 @@ enum Role {
   ADMIN
 }
 
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
 model User {
-  id            String   @id
+  id            String      @id
   name          String
-  email         String   @unique
-  emailVerified Boolean  @default(false)
+  email         String      @unique
+  emailVerified Boolean     @default(false)
   image         String?
-  role          Role?    @default(STUDENT)
+  role          Role?       @default(STUDENT)
   phone         String?
-  status        String?  @default("ACTIVE")
+  status        UserStatus? @default(ACTIVE)
   bio           String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
   tutorProfile TutorProfile?
   bookings     Booking[]     @relation("StudentBookings")
