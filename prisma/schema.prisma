@@ -102,8 +102,8 @@ model TutorProfile {
 
   availability Availability[]
   bookings     Booking[]      @relation("TutorBookings")
-  category     Category?      @relation(fields: [categoryId], references: [id])
-  categoryId   String?
+  category     Category      @relation(fields: [categoryId], references: [id])
+  categoryId   String
   reviews      Review[]       @relation("TutorReviews")
 }
 
