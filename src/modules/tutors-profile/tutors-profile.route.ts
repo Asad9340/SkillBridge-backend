@@ -19,5 +19,10 @@ router.patch(
   auth(UserRole.TUTOR),
   TutorsProfileController.UpdateTutorProfile,
 );
+router.patch(
+  '/subjects/:tutorId',
+  auth(UserRole.TUTOR),
+  TutorsProfileController.UpdateUserprofileForSubjects,
+);
 
 export const TutorsProfileRouters = router;

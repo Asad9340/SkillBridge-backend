@@ -2,12 +2,21 @@ import { Request, Response } from 'express';
 import { catchAsync } from '../../utils/catchAsync';
 import { TutorsAvailabilityService } from './tutors-availability.service';
 
-const GetTutorAvailabilityById = catchAsync(
+const GetAllAvailability = catchAsync(async (req: Request, res: Response) => {
+  const result = await TutorsAvailabilityService.GetAllAvailability();
+  res.status(200).json({
+    success: true,
+    message: 'All Tutors availability fetched successfully',
+    data: result,
+  });
+})
+const GetTutorAvailabilityByTutorId = catchAsync(
   async (req: Request, res: Response) => {
     const tutorId = req.params.availabilityId;
-    const result = await TutorsAvailabilityService.GetTutorAvailabilityById(
-      tutorId as string,
-    );
+    const result =
+      await TutorsAvailabilityService.GetTutorAvailabilityByTutorId(
+        tutorId as string,
+      );
     res.status(200).json({
       success: true,
       message: 'Tutor availability fetched successfully',
@@ -61,7 +70,8 @@ const DeleteTutorAvailability = catchAsync(
 );
 
 export const TutorsAvailabilityController = {
-  GetTutorAvailabilityById,
+  GetAllAvailability,
+  GetTutorAvailabilityByTutorId,
   CreateTutorAvailability,
   UpdateTutorAvailability,
   DeleteTutorAvailability,

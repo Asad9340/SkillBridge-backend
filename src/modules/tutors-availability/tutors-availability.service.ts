@@ -1,7 +1,19 @@
-
+import { Availability } from '../../../generated/prisma/client';
 import { prisma } from '../../../lib/prisma';
 
-const GetTutorAvailabilityById = async (tutorId: string) => {
+const GetAllAvailability = async () => {
+  const result = await prisma.availability.findMany({
+    include: {
+      tutor: {
+        select: {
+          subjects:true
+        },
+      },
+    },
+  });
+  return result;
+};
+const GetTutorAvailabilityByTutorId = async (tutorId: string) => {
   const result = await prisma.availability.findMany({
     where: { tutorId },
   });
@@ -32,7 +44,8 @@ const DeleteTutorAvailability = async (availabilityId: string) => {
 };
 
 export const TutorsAvailabilityService = {
-  GetTutorAvailabilityById,
+  GetAllAvailability,
+  GetTutorAvailabilityByTutorId,
   CreateTutorAvailability,
   UpdateTutorAvailability,
   DeleteTutorAvailability,

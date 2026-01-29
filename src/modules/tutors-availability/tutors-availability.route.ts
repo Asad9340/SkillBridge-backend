@@ -5,9 +5,15 @@ import auth, { UserRole } from '../../middlewares/auth';
 const router = Router();
 
 router.get(
+  '/',
+  auth(UserRole.STUDENT),
+  TutorsAvailabilityController.GetAllAvailability,
+);
+
+router.get(
   '/:availabilityId',
-  auth(UserRole.TUTOR, UserRole.STUDENT),
-  TutorsAvailabilityController.GetTutorAvailabilityById,
+  auth(UserRole.TUTOR),
+  TutorsAvailabilityController.GetTutorAvailabilityByTutorId,
 );
 
 router.post(

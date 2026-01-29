@@ -23,5 +23,8 @@ model Availability {
   endTime   String
   isBooked  Boolean  @default(false)
 
-  tutor TutorProfile @relation(fields: [tutorId], references: [id])
+  tutor   TutorProfile @relation(fields: [tutorId], references: [id])
+  booking Booking?
+
+  @@index([tutorId])
 }

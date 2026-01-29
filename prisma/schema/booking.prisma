@@ -6,19 +6,23 @@ enum BookingStatus {
 }
 
 model Booking {
-  id          String        @id @default(uuid())
-  studentId   String
-  tutorId     String
-  subjectId   String
-  scheduledAt DateTime
-  status      BookingStatus @default(PENDING)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @default(now())
+  id             String        @id @default(uuid())
+  studentId      String
+  tutorId        String
+  subjectId      String
+  availabilityId String
+  status         BookingStatus @default(PENDING)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @default(now())
 
-  student User         @relation("StudentBookings", fields: [studentId], references: [id])
-  tutor   TutorProfile @relation("TutorBookings", fields: [tutorId], references: [id])
-  subject Subject      @relation(fields: [subjectId], references: [id])
+  student      User         @relation("StudentBookings", fields: [studentId], references: [id])
+  tutor        TutorProfile @relation("TutorBookings", fields: [tutorId], references: [id])
+  subject      Subject      @relation(fields: [subjectId], references: [id])
+  availability Availability @relation(fields: [availabilityId], references: [id])
+
+  @@unique([availabilityId])
 }
+
 
 model Review {
   id        String       @id @default(uuid())

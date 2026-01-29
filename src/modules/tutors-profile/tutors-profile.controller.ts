@@ -29,7 +29,6 @@ const CreateTutorProfile = catchAsync(async (req: Request, res: Response) => {
 const UpdateTutorProfile = catchAsync(async (req: Request, res: Response) => {
   const { tutorId } = req.params;
   const tutorPayload = req.body;
-
   const result = await TutorsProfileService.UpdateTutorProfile(
     tutorId as string,
     tutorPayload,
@@ -41,8 +40,25 @@ const UpdateTutorProfile = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const UpdateUserprofileForSubjects = catchAsync(
+  async (req: Request, res: Response) => {
+    const tutorId = req.params.tutorId;
+    const { subjectIds } = req.body;
+    const result = await TutorsProfileService.UpdateUserprofileForSubjects(
+      tutorId as string,
+      subjectIds,
+    );
+    res.status(200).json({
+      success: true,
+      message: 'Tutor profile updated successfully',
+      data: result,
+    });
+  },
+);
+
 export const TutorsProfileController = {
   GetTutorProfileById,
   CreateTutorProfile,
   UpdateTutorProfile,
+  UpdateUserprofileForSubjects,
 };
