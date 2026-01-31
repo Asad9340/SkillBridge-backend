@@ -9,5 +9,10 @@ router.patch(
   auth(UserRole.ADMIN),
   UsersController.UpdateUserStatus,
 );
+router.patch(
+  '/update-student/:userId',
+  auth(UserRole.STUDENT),
+  UsersController.UpdateUserProfile,
+);
 
 export const UsersRouters = router;

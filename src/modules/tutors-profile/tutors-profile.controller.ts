@@ -2,6 +2,16 @@ import { Request, Response } from 'express';
 import { catchAsync } from '../../utils/catchAsync';
 import { TutorsProfileService } from './tutors-profile.service';
 
+const GetAllTutors = catchAsync(async (req: Request, res: Response) => {
+ const filters = req.query;
+
+  const result = await TutorsProfileService.GetAllTutors(filters);
+   res.status(200).json({
+     success: true,
+     message: 'All Tutor fetched successfully',
+     data: result,
+   });
+})
 const GetTutorProfileById = catchAsync(async (req: Request, res: Response) => {
   const tutorId = req.params.tutorId;
 
@@ -57,6 +67,7 @@ const UpdateUserprofileForSubjects = catchAsync(
 );
 
 export const TutorsProfileController = {
+  GetAllTutors,
   GetTutorProfileById,
   CreateTutorProfile,
   UpdateTutorProfile,

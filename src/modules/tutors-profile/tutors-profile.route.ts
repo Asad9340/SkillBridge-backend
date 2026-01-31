@@ -4,14 +4,15 @@ import auth, { UserRole } from '../../middlewares/auth';
 
 const router = Router();
 
+router.get('/', TutorsProfileController.GetAllTutors);
+
 router.get(
   '/:tutorId',
-  auth(UserRole.TUTOR),
   TutorsProfileController.GetTutorProfileById,
 );
 router.post(
   '/',
-  auth(UserRole.TUTOR),
+  auth(UserRole.STUDENT),
   TutorsProfileController.CreateTutorProfile,
 );
 router.patch(

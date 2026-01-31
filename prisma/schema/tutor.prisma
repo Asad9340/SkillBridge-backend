@@ -18,12 +18,14 @@ model TutorProfile {
 model Availability {
   id        String   @id @default(uuid())
   tutorId   String
+  subjectId String
   date      DateTime
   startTime String
   endTime   String
   isBooked  Boolean  @default(false)
 
   tutor   TutorProfile @relation(fields: [tutorId], references: [id])
+  subject Subject      @relation(fields: [subjectId], references: [id])
   booking Booking?
 
   @@index([tutorId])

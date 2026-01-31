@@ -11,7 +11,7 @@ router.get(
 );
 
 router.get(
-  '/:availabilityId',
+  '/:tutorId',
   auth(UserRole.TUTOR),
   TutorsAvailabilityController.GetTutorAvailabilityByTutorId,
 );

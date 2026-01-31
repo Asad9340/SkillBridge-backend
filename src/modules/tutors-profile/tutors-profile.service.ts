@@ -1,19 +1,87 @@
-import { Subject, TutorProfile } from '../../../generated/prisma/client';
+import { TutorProfile } from '../../../generated/prisma/client';
 import { prisma } from '../../../lib/prisma';
 
+interface TutorQuery {
+  category?: string;
+  subject?: string;
+  minPrice?: string;
+  maxPrice?: string;
+  rating?: string;
+  page?: string;
+  limit?: string;
+}
+const GetAllTutors = async (queryData: TutorQuery) => {
+  const result = await prisma.tutorProfile.findMany({
+    include: {
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+      subjects: {
+        select: {
+          subject: true,
+        },
+      },
+      availability: {
+        select: {
+          date: true,
+          isBooked: true,
+          startTime: true,
+          endTime: true,
+        },
+      },
+    },
+  });
+
+  return result.map(({ user, subjects, ...tutor }) => ({
+    ...tutor,
+    userId: user.id,
+    name: user.name,
+    email: user.email,
+    subjects: subjects.map(s => s.subject),
+  }));
+};
 const GetTutorProfileById = async (tutorId: string) => {
   const result = await prisma.tutorProfile.findUnique({
-    where: { id: tutorId },
-    include: { availability: true, subjects: true },
+    where: { userId: tutorId },
+    include: {
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+    },
   });
-  return result;
+
+  if (!result) return null;
+
+  const { user, ...tutor } = result;
+
+  return {
+    ...tutor,
+    userId: user.id,
+    name: user.name,
+    email: user.email,
+  };
 };
 
-const CreateTutorProfile = async (tutorPayload: TutorProfile) => {
-  const result = await prisma.tutorProfile.create({
+
+export const CreateTutorProfile = async (tutorPayload: TutorProfile) => {
+  const tutorProfile = await prisma.tutorProfile.create({
     data: tutorPayload,
   });
-  return result;
+
+  await prisma.user.update({
+    where: { id: tutorPayload.userId },
+    data: { role: 'TUTOR' },
+  });
+
+  return tutorProfile;
 };
 
 const UpdateTutorProfile = async (
@@ -71,6 +139,7 @@ const UpdateUserprofileForSubjects = async (
 };
 
 export const TutorsProfileService = {
+  GetAllTutors,
   GetTutorProfileById,
   CreateTutorProfile,
   UpdateTutorProfile,

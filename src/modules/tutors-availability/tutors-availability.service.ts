@@ -6,7 +6,7 @@ const GetAllAvailability = async () => {
     include: {
       tutor: {
         select: {
-          subjects:true
+          subjects: true,
         },
       },
     },
@@ -16,8 +16,19 @@ const GetAllAvailability = async () => {
 const GetTutorAvailabilityByTutorId = async (tutorId: string) => {
   const result = await prisma.availability.findMany({
     where: { tutorId },
+    include: {
+      subject: {
+        select: {
+          name: true,
+        },
+      },
+    },
   });
-  return result;
+
+  return result.map(({ subject, ...rest }) => ({
+    ...rest,
+    subject: subject.name,
+  }));
 };
 
 const CreateTutorAvailability = async (availabilityPayload: Availability) => {

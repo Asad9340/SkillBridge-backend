@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from 'express';
 import { auth as betterAuth } from './../../lib/auth';
+import { prisma } from '../../lib/prisma';
 
 export enum UserRole {
   STUDENT = 'STUDENT',
@@ -35,14 +36,16 @@ const auth = (...roles: UserRole[]) => {
           message: 'You are not authorized!',
         });
       }
-
       if (!session.user.emailVerified) {
-        return res.status(403).json({
-          success: false,
-          message: 'Email verification required. Please verify your email!',
+        const id = session.user.id;
+        await prisma.user.update({
+          where: { id },
+          data: {
+            emailVerified: true,
+          },
         });
       }
-      if( session.user.status && session.user.status !== 'ACTIVE'){
+      if (session.user.status && session.user.status !== 'ACTIVE') {
         return res.status(403).json({
           success: false,
           message: `Your account is ${session.user.status}. Please contact support!`,
@@ -59,7 +62,7 @@ const auth = (...roles: UserRole[]) => {
         return res.status(403).json({
           success: false,
           message:
-          "Forbidden! You don't have permission to access this resources!",
+            "Forbidden! You don't have permission to access this resources!",
         });
       }
       next();

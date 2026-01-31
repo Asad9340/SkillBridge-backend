@@ -7,12 +7,13 @@ model Category {
 }
 
 model Subject {
-  id         String         @id @default(uuid())
-  name       String
-  categoryId String
-  category   Category       @relation(fields: [categoryId], references: [id])
-  tutors     TutorSubject[]
-  bookings   Booking[]
+  id             String         @id @default(uuid())
+  name           String
+  categoryId     String
+  category       Category       @relation(fields: [categoryId], references: [id])
+  tutors         TutorSubject[]
+  bookings       Booking[]
+  availabilities Availability[]
 }
 
 model TutorSubject {
