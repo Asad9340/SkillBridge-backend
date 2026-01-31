@@ -23,7 +23,22 @@ const GetAllBooking = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const UpdateBooking = catchAsync(async (req: Request, res: Response) => {
+  const studentId = req.params.bookingId;
+  const bookingPayload = req.body;
+  const result = await BookingSessionService.UpdateBooking(
+    studentId as string,
+    bookingPayload,
+  );
+  res.status(200).json({
+    success: true,
+    message: 'Booing updated successfully',
+    data: result,
+  });
+});
+
 export const BookingSessionController = {
   CreateSession,
   GetAllBooking,
+  UpdateBooking,
 };
