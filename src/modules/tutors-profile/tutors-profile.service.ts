@@ -18,41 +18,64 @@ const GetAllTutors = async (queryData: TutorQuery) => {
           id: true,
           name: true,
           email: true,
-        },
-      },
-      subjects: {
-        select: {
-          subject: true,
-        },
-      },
-      availability: {
-        select: {
-          date: true,
-          isBooked: true,
-          startTime: true,
-          endTime: true,
+          image: true,
         },
       },
     },
   });
 
-  return result.map(({ user, subjects, ...tutor }) => ({
+  return result.map(({ user, ...tutor }) => ({
     ...tutor,
     userId: user.id,
     name: user.name,
     email: user.email,
-    subjects: subjects.map(s => s.subject),
+    image: user.image,
   }));
 };
+
 const GetTutorProfileById = async (tutorId: string) => {
   const result = await prisma.tutorProfile.findUnique({
     where: { userId: tutorId },
-    include: {
+    select: {
+      id: true,
+      bio: true,
+      hourlyRate: true,
+      rating: true,
+      totalReviews: true,
+      createdAt: true,
+      updatedAt: true,
+
       user: {
         select: {
           id: true,
           name: true,
           email: true,
+          image: true,
+        },
+      },
+
+      availability: {
+        select: {
+          id: true,
+          tutorId: true,
+          subjectId: true,
+          date: true,
+          startTime: true,
+          endTime: true,
+          isBooked: true,
+
+          subject: {
+            select: {
+              id: true,
+              name: true,
+              category: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
         },
       },
     },
@@ -60,16 +83,30 @@ const GetTutorProfileById = async (tutorId: string) => {
 
   if (!result) return null;
 
-  const { user, ...tutor } = result;
+  const { user, availability, ...tutor } = result;
+
+  const flatAvailability = availability.map(slot => ({
+    id: slot.id,
+    tutorId: slot.tutorId,
+    subjectId: slot.subjectId,
+    subjectName: slot.subject.name,
+    categoryId: slot.subject.category.id,
+    categoryName: slot.subject.category.name,
+    date: slot.date,
+    startTime: slot.startTime,
+    endTime: slot.endTime,
+    isBooked: slot.isBooked,
+  }));
 
   return {
     ...tutor,
     userId: user.id,
     name: user.name,
     email: user.email,
+    image: user.image,
+    availability: flatAvailability,
   };
 };
-
 
 export const CreateTutorProfile = async (tutorPayload: TutorProfile) => {
   const tutorProfile = await prisma.tutorProfile.create({

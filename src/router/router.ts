@@ -6,6 +6,7 @@ import { TutorsAvailabilityRoutes } from '../modules/tutors-availability/tutors-
 import { SubjectsRouters } from '../modules/subjects/subjects.route';
 import { UserProfileRouter } from '../modules/user-profile/user-profile.route';
 import { BookingSessionRouter } from '../modules/booking-session/booking-session.route';
+import { ReviewRouters } from '../modules/reviews/reviews.route';
 
 const router = Router();
 
@@ -15,7 +16,8 @@ router.use('/manage-users', UsersRouters);
 router.use('/student-profile', UserProfileRouter)
 router.use('/tutors-profile', TutorsProfileRouters);
 router.use('/tutors-availability', TutorsAvailabilityRoutes);
-router.use("/booking-session",BookingSessionRouter)
+router.use("/booking-session", BookingSessionRouter)
+router.use('/reviews', ReviewRouters)
 
 
 export { router };
