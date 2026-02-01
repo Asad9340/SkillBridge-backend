@@ -7,6 +7,7 @@ import { SubjectsRouters } from '../modules/subjects/subjects.route';
 import { UserProfileRouter } from '../modules/user-profile/user-profile.route';
 import { BookingSessionRouter } from '../modules/booking-session/booking-session.route';
 import { ReviewRouters } from '../modules/reviews/reviews.route';
+import { AnalyticsRouters } from '../modules/analytics/analytics.route';
 
 const router = Router();
 
@@ -18,6 +19,7 @@ router.use('/tutors-profile', TutorsProfileRouters);
 router.use('/tutors-availability', TutorsAvailabilityRoutes);
 router.use("/booking-session", BookingSessionRouter)
 router.use('/reviews', ReviewRouters)
+router.use('/analytics',AnalyticsRouters)
 
 
 export { router };
