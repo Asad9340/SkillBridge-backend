@@ -6,6 +6,7 @@ const CreateSession = catchAsync(async (req: Request, res: Response) => {
   const bookingPayload = req.body;
   bookingPayload.studentId = req.user?.id;
   const result = await BookingSessionService.CreateSession(bookingPayload);
+  console.log("result",result)
   res.status(201).json({
     success: true,
     message: 'Booking Session Created Successfully',
@@ -22,6 +23,17 @@ const GetAllBooking = catchAsync(async (req: Request, res: Response) => {
     data: result,
   });
 });
+const GetAllBookingByTutorId = catchAsync(
+  async (req: Request, res: Response) => {
+    const tutorId = req.params.tutorId;
+    const result = await BookingSessionService.GetAllBookingByTutorId(tutorId as string);
+    res.status(200).json({
+      success: true,
+      message: 'Booing fetched successfully',
+      data: result,
+    });
+  },
+);
 
 const UpdateBooking = catchAsync(async (req: Request, res: Response) => {
   const studentId = req.params.bookingId;
@@ -41,4 +53,5 @@ export const BookingSessionController = {
   CreateSession,
   GetAllBooking,
   UpdateBooking,
+  GetAllBookingByTutorId,
 };
