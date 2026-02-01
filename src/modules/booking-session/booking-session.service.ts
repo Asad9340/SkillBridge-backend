@@ -2,22 +2,29 @@ import { Booking } from '../../../generated/prisma/client';
 import { prisma } from '../../../lib/prisma';
 import { AppError } from '../../errors/AppError';
 
-const CreateSession = async ({
-  tutorId,
-  subjectId,
-  availabilityId,
-  studentId,
-}: Booking) => {
-  console.log(tutorId, subjectId, availabilityId, studentId);
-  const booking = await prisma.$transaction(async tx => {
+const CreateSession = async (payload: Booking) => {
+  const { tutorId, subjectId, availabilityId, studentId } = payload;
+
+  return await prisma.$transaction(async tx => {
     const slot = await tx.availability.findFirst({
-      where: { id: availabilityId, tutorId, isBooked: false },
+      where: {
+        id: availabilityId,
+        tutorId,
+        isBooked: false,
+      },
     });
 
-    if (!slot) new AppError(404, 'Slot not available');
+    if (!slot) {
+      throw new AppError(404, 'Slot not available');
+    }
 
     const newBooking = await tx.booking.create({
-      data: { studentId, tutorId, subjectId, availabilityId },
+      data: {
+        tutorId,
+        subjectId,
+        availabilityId,
+        studentId,
+      },
     });
 
     await tx.availability.update({
@@ -26,11 +33,68 @@ const CreateSession = async ({
     });
     return newBooking;
   });
-  return booking;
 };
+
 const GetAllBooking = async (studentId: string) => {
   const bookings = await prisma.booking.findMany({
     where: { studentId },
+    include: {
+      tutor: {
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              image: true,
+            },
+          },
+        },
+      },
+      subject: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      availability: {
+        select: {
+          id: true,
+          date: true,
+          startTime: true,
+          endTime: true,
+          isBooked: true,
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  const flatBookings = bookings.map(b => ({
+    id: b.id,
+    studentId: b.studentId,
+    tutorId: b.tutorId,
+    tutorName: b.tutor.user.name,
+    tutorEmail: b.tutor.user.email,
+    tutorImage: b.tutor.user.image,
+    subjectId: b.subject.id,
+    subjectName: b.subject.name,
+    availabilityId: b.availability.id,
+    date: b.availability.date,
+    startTime: b.availability.startTime,
+    endTime: b.availability.endTime,
+    isBooked: b.availability.isBooked,
+    status: b.status,
+    createdAt: b.createdAt,
+    updatedAt: b.updatedAt,
+  }));
+
+  return flatBookings;
+};
+const GetAllBookingByTutorId = async (tutorId: string) => {
+  console.log(tutorId)
+  const bookings = await prisma.booking.findMany({
+    where: { tutorId },
     include: {
       tutor: {
         include: {
@@ -97,5 +161,6 @@ const UpdateBooking = async (
 export const BookingSessionService = {
   CreateSession,
   GetAllBooking,
+  GetAllBookingByTutorId,
   UpdateBooking,
 };
