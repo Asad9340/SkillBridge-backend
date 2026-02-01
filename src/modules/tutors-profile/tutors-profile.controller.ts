@@ -1,17 +1,15 @@
 import { Request, Response } from 'express';
 import { catchAsync } from '../../utils/catchAsync';
-import { TutorsProfileService } from './tutors-profile.service';
+import { TutorQuery, TutorsProfileService } from './tutors-profile.service';
 
 const GetAllTutors = catchAsync(async (req: Request, res: Response) => {
-  const result = await TutorsProfileService.GetAllTutors(req.query);
-
+  const result = await TutorsProfileService.GetAllTutors(req.query as TutorQuery);
   res.status(200).json({
     success: true,
-    message: 'All Tutor fetched successfully',
+    message: 'Tutors fetched successfully',
     data: result,
   });
 });
-
 const GetTutorProfileById = catchAsync(async (req: Request, res: Response) => {
   const tutorId = req.params.tutorId;
 

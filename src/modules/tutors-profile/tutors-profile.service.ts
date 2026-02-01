@@ -1,106 +1,97 @@
-import { TutorProfile } from '../../../generated/prisma/client';
+import { Prisma, TutorProfile } from '../../../generated/prisma/client';
 import { prisma } from '../../../lib/prisma';
-
-
-interface TutorQuery {
+export interface TutorQuery {
   category?: string;
-  subject?: string;
-  minPrice?: string;
-  maxPrice?: string;
-  rating?: string;
+  search?: string;
   page?: string;
   limit?: string;
 }
+export const GetAllTutors = async (queryData: TutorQuery) => {
+  const { category, search, page = '1', limit = '10' } = queryData;
 
-const GetAllTutors = async (queryData: TutorQuery) => {
-  const {
-    category,
-    subject,
-    minPrice,
-    maxPrice,
-    rating,
-    page = '1',
-    limit = '8',
-  } = queryData;
-
-  const pageNumber = Number(page);
-  const limitNumber = Number(limit);
+  const pageNumber = Math.max(1, Number(page) || 1);
+  const limitNumber = Math.min(50, Math.max(1, Number(limit)));
   const skip = (pageNumber - 1) * limitNumber;
 
   const andConditions: any[] = [];
-
-  // 🔹 Filter by Category
-  if (category) {
-    andConditions.push({
-      category: {
-        equals: category,
-        mode: 'insensitive',
-      },
-    });
-  }
-
-  // 🔹 Filter by Subject
-  if (subject) {
+  console.log(category, search, page , limit );
+  if (category?.trim() && category.trim().toLowerCase() !== 'all') {
+    const trimmedCat = category.trim();
     andConditions.push({
       subjects: {
-        has: subject,
-      },
-    });
-  }
-
-  // 🔹 Filter by Price
-  if (minPrice || maxPrice) {
-    andConditions.push({
-      hourlyRate: {
-        gte: minPrice ? Number(minPrice) : undefined,
-        lte: maxPrice ? Number(maxPrice) : undefined,
-      },
-    });
-  }
-
-  // 🔹 Filter by Rating
-  if (rating) {
-    andConditions.push({
-      rating: {
-        gte: Number(rating),
-      },
-    });
-  }
-
-  const whereCondition = {
-    AND: andConditions,
-  };
-
-  // 🔥 Fetch tutors
-  const tutors = await prisma.tutorProfile.findMany({
-    where: whereCondition,
-
-    include: {
-      user: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          image: true,
+        some: {
+          subject: {
+            OR: [
+              { category: { id: { equals: trimmedCat } } },
+              {
+                category: {
+                  name: { contains: trimmedCat, mode: 'insensitive' },
+                },
+              },
+            ],
+          },
         },
       },
-    },
+    });
+  }
+console.log(andConditions)
+  if (search?.trim()) {
+    const trimmed = search.trim();
+    const num = Number(trimmed);
 
-    orderBy: {
-      rating: 'desc',
-    },
+    if (!isNaN(num)) {
+      andConditions.push({
+        OR: [{ rating: { gte: num } }, { hourlyRate: { equals: num } }],
+      });
+    } else {
+      andConditions.push({
+        OR: [
+          { bio: { contains: trimmed, mode: 'insensitive' } },
+          { user: { name: { contains: trimmed, mode: 'insensitive' } } },
+          {
+            subjects: {
+              some: {
+                subject: {
+                  OR: [
+                    { name: { contains: trimmed, mode: 'insensitive' } },
+                    {
+                      category: {
+                        name: { contains: trimmed, mode: 'insensitive' },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        ],
+      });
+    }
+  }
 
-    skip,
-    take: limitNumber,
-  });
+  const whereCondition = andConditions.length ? { AND: andConditions } : {};
+  const [tutors, total] = await Promise.all([
+    prisma.tutorProfile.findMany({
+      where: whereCondition,
+      include: {
+        user: {
+          select: { id: true, name: true, email: true, image: true },
+        },
+        subjects: {
+          include: {
+            subject: { include: { category: true } },
+          },
+        },
+      },
+      orderBy: { rating: 'desc' },
+      skip,
+      take: limitNumber,
+    }),
 
-  // 🔥 Total Count
-  const total = await prisma.tutorProfile.count({
-    where: whereCondition,
-  });
+    prisma.tutorProfile.count({ where: whereCondition }),
+  ]);
 
-  // 🔥 Shape Response (Only UI Needed Data)
-  const data = tutors.map(({ user, ...tutor }) => ({
+  const data = tutors.map(({ user, subjects, ...tutor }) => ({
     id: tutor.id,
     userId: user.id,
     bio: tutor.bio,
@@ -110,6 +101,8 @@ const GetAllTutors = async (queryData: TutorQuery) => {
     name: user.name,
     email: user.email,
     image: user.image,
+    subjects: subjects.map(s => s.subject.name),
+    categories: subjects.map(s => s.subject.category.name),
   }));
 
   return {
@@ -117,12 +110,11 @@ const GetAllTutors = async (queryData: TutorQuery) => {
       total,
       page: pageNumber,
       limit: limitNumber,
-      totalPage: Math.ceil(total / limitNumber),
+      totalPages: Math.ceil(total / limitNumber),
     },
     data,
   };
 };
-
 
 const GetTutorProfileById = async (tutorId: string) => {
   const result = await prisma.tutorProfile.findUnique({
@@ -169,12 +161,25 @@ const GetTutorProfileById = async (tutorId: string) => {
           },
         },
       },
+
+      reviews: {
+        select: {
+          rating: true,
+          comment: true, 
+          student: {
+            select: {
+              name: true,
+              image: true,
+            },
+          },
+        },
+      },
     },
   });
 
   if (!result) return null;
 
-  const { user, availability, ...tutor } = result;
+  const { user, availability, reviews, ...tutor } = result;
 
   const flatAvailability = availability.map(slot => ({
     id: slot.id,
@@ -189,6 +194,13 @@ const GetTutorProfileById = async (tutorId: string) => {
     isBooked: slot.isBooked,
   }));
 
+  const formattedReviews = reviews.map(r => ({
+    reviewerName: r.student.name,
+    reviewerImage: r.student.image,
+    rating: r.rating,
+    review: r.comment,
+  }));
+
   return {
     ...tutor,
     userId: user.id,
@@ -196,8 +208,10 @@ const GetTutorProfileById = async (tutorId: string) => {
     email: user.email,
     image: user.image,
     availability: flatAvailability,
+    reviews: formattedReviews,
   };
 };
+
 
 export const CreateTutorProfile = async (tutorPayload: TutorProfile) => {
   const tutorProfile = await prisma.tutorProfile.create({
