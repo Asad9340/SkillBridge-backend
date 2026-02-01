@@ -23,7 +23,17 @@ const GetAllRating = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const GetAllRatingPublic = catchAsync(async (req: Request, res: Response) => {
+  const result = await ReviewService.GetAllRatingPublic();
+  res.status(200).json({
+    success: true,
+    message: 'Review fetched successfully',
+    data: result,
+  });
+});
+
 export const ReviewController = {
   CreateReview,
   GetAllRating,
+  GetAllRatingPublic,
 };
