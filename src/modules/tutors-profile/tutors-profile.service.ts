@@ -1,6 +1,7 @@
 import { TutorProfile } from '../../../generated/prisma/client';
 import { prisma } from '../../../lib/prisma';
 
+
 interface TutorQuery {
   category?: string;
   subject?: string;
@@ -10,8 +11,70 @@ interface TutorQuery {
   page?: string;
   limit?: string;
 }
+
 const GetAllTutors = async (queryData: TutorQuery) => {
-  const result = await prisma.tutorProfile.findMany({
+  const {
+    category,
+    subject,
+    minPrice,
+    maxPrice,
+    rating,
+    page = '1',
+    limit = '8',
+  } = queryData;
+
+  const pageNumber = Number(page);
+  const limitNumber = Number(limit);
+  const skip = (pageNumber - 1) * limitNumber;
+
+  const andConditions: any[] = [];
+
+  // 🔹 Filter by Category
+  if (category) {
+    andConditions.push({
+      category: {
+        equals: category,
+        mode: 'insensitive',
+      },
+    });
+  }
+
+  // 🔹 Filter by Subject
+  if (subject) {
+    andConditions.push({
+      subjects: {
+        has: subject,
+      },
+    });
+  }
+
+  // 🔹 Filter by Price
+  if (minPrice || maxPrice) {
+    andConditions.push({
+      hourlyRate: {
+        gte: minPrice ? Number(minPrice) : undefined,
+        lte: maxPrice ? Number(maxPrice) : undefined,
+      },
+    });
+  }
+
+  // 🔹 Filter by Rating
+  if (rating) {
+    andConditions.push({
+      rating: {
+        gte: Number(rating),
+      },
+    });
+  }
+
+  const whereCondition = {
+    AND: andConditions,
+  };
+
+  // 🔥 Fetch tutors
+  const tutors = await prisma.tutorProfile.findMany({
+    where: whereCondition,
+
     include: {
       user: {
         select: {
@@ -22,16 +85,44 @@ const GetAllTutors = async (queryData: TutorQuery) => {
         },
       },
     },
+
+    orderBy: {
+      rating: 'desc',
+    },
+
+    skip,
+    take: limitNumber,
   });
 
-  return result.map(({ user, ...tutor }) => ({
-    ...tutor,
+  // 🔥 Total Count
+  const total = await prisma.tutorProfile.count({
+    where: whereCondition,
+  });
+
+  // 🔥 Shape Response (Only UI Needed Data)
+  const data = tutors.map(({ user, ...tutor }) => ({
+    id: tutor.id,
     userId: user.id,
+    bio: tutor.bio,
+    hourlyRate: tutor.hourlyRate,
+    rating: tutor.rating,
+    totalReviews: tutor.totalReviews,
     name: user.name,
     email: user.email,
     image: user.image,
   }));
+
+  return {
+    meta: {
+      total,
+      page: pageNumber,
+      limit: limitNumber,
+      totalPage: Math.ceil(total / limitNumber),
+    },
+    data,
+  };
 };
+
 
 const GetTutorProfileById = async (tutorId: string) => {
   const result = await prisma.tutorProfile.findUnique({

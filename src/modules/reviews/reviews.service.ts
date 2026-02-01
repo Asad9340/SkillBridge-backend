@@ -49,14 +49,30 @@ const GetAllRating = async (tutorId: string) => {
         select: {
           name: true,
           email: true,
-          image:true,
-        }
-      }
-    }
+          image: true,
+        },
+      },
+    },
+  });
+  return result;
+};
+const GetAllRatingPublic = async () => {
+  const result = await prisma.review.findMany({
+    include: {
+      student: {
+        select: {
+          name: true,
+          email: true,
+          image: true,
+        },
+      },
+    },
+    take:8,
   });
   return result;
 };
 export const ReviewService = {
   CreateReview,
   GetAllRating,
+  GetAllRatingPublic,
 };
