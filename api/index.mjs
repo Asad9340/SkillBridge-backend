@@ -73,10 +73,28 @@ var prisma = new PrismaClient({ adapter });
 
 // lib/auth.ts
 var auth = betterAuth({
+  baseURL: "https://skill-bridge-sooty-five.vercel.app/api/auth",
   database: prismaAdapter(prisma, {
     provider: "postgresql"
   }),
-  trustedOrigins: [process.env.TRUSTED_ORIGINS || "http://localhost:5000"],
+  // trustedOrigins: [process.env.TRUSTED_ORIGINS || 'http://localhost:5000'],
+  trustedOrigins: async (request) => {
+    const origin = request?.headers.get("origin");
+    const allowedOrigins2 = [
+      process.env.TRUSTED_ORIGINS,
+      process.env.BETTER_AUTH_URL,
+      "http://localhost:3000",
+      "http://localhost:4000",
+      "http://localhost:5000",
+      "https://skill-bridge-backend-nine.vercel.app",
+      "https://skill-bridge-sooty-five.vercel.app"
+    ].filter(Boolean);
+    if (!origin || allowedOrigins2.includes(origin) || /^https:\/\/.*\.vercel\.app$/.test(origin)) {
+      return [origin];
+    }
+    return [];
+  },
+  basePath: "/api/auth",
   user: {
     additionalFields: {
       role: {
@@ -164,7 +182,40 @@ var auth = betterAuth({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET
     }
-  }
+  },
+  // session: {
+  //   cookieCache: {
+  //     enabled: true,
+  //     maxAge: 5 * 60, // 5 minutes
+  //   },
+  // },
+  // advanced: {
+  //   cookiePrefix: 'better-auth',
+  //   useSecureCookies: process.env.NODE_ENV === 'production',
+  //   crossSubDomainCookies: {
+  //     enabled: false,
+  //   },
+  //   disableCSRFCheck: true,
+  // },
+  advanced: {
+    defaultCookieAttributes: {
+      sameSite: "none",
+      secure: true,
+      httpOnly: true,
+      path: "/"
+    },
+    cookies: {
+      state: {
+        attributes: {
+          sameSite: "none",
+          secure: true,
+          path: "/"
+        }
+      }
+    },
+    trustProxy: true
+  },
+  secret: "thisisasecretforbetterauth"
 });
 
 // src/app.ts
@@ -1543,10 +1594,29 @@ var globalErrorHandler = (err, req, res, next) => {
 
 // src/app.ts
 var app = express();
+app.set("trust proxy", true);
+var allowedOrigins = [
+  "https://skill-bridge-backend-nine.vercel.app",
+  process.env.PROD_APP_URL,
+  "http://localhost:3000",
+  "http://localhost:4000",
+  "http://localhost:5000"
+].filter(Boolean);
 app.use(
   cors({
-    origin: "https://skill-bridge-sooty-five.vercel.app",
-    credentials: true
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      const isAllowed = allowedOrigins.includes(origin) || /^https:\/\/skill-bridge-backend-nine.*\.vercel\.app$/.test(origin) || /^https:\/\/.*\.vercel\.app$/.test(origin);
+      if (isAllowed) {
+        callback(null, true);
+      } else {
+        callback(new Error(`Origin ${origin} not allowed by CORS`));
+      }
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "Cookie"],
+    exposedHeaders: ["Set-Cookie"]
   })
 );
 app.use(express.json());

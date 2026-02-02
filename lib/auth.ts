@@ -14,10 +14,36 @@ import nodemailer from 'nodemailer';
 // });
 
 export const auth = betterAuth({
+  baseURL: 'https://skill-bridge-sooty-five.vercel.app/api/auth',
   database: prismaAdapter(prisma, {
     provider: 'postgresql',
   }),
-  trustedOrigins: [process.env.TRUSTED_ORIGINS || 'http://localhost:5000'],
+  // trustedOrigins: [process.env.TRUSTED_ORIGINS || 'http://localhost:5000'],
+  trustedOrigins: async request => {
+    const origin = request?.headers.get('origin');
+
+    const allowedOrigins = [
+      process.env.TRUSTED_ORIGINS,
+      process.env.BETTER_AUTH_URL,
+      'http://localhost:3000',
+      'http://localhost:4000',
+      'http://localhost:5000',
+      'https://skill-bridge-backend-nine.vercel.app',
+      'https://skill-bridge-sooty-five.vercel.app',
+    ].filter(Boolean);
+
+    // Check if origin matches allowed origins or Vercel pattern
+    if (
+      !origin ||
+      allowedOrigins.includes(origin) ||
+      /^https:\/\/.*\.vercel\.app$/.test(origin)
+    ) {
+      return [origin];
+    }
+
+    return [];
+  },
+  basePath: '/api/auth',
   user: {
     additionalFields: {
       role: {
@@ -111,4 +137,37 @@ export const auth = betterAuth({
       clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
     },
   },
+  // session: {
+  //   cookieCache: {
+  //     enabled: true,
+  //     maxAge: 5 * 60, // 5 minutes
+  //   },
+  // },
+  // advanced: {
+  //   cookiePrefix: 'better-auth',
+  //   useSecureCookies: process.env.NODE_ENV === 'production',
+  //   crossSubDomainCookies: {
+  //     enabled: false,
+  //   },
+  //   disableCSRFCheck: true,
+  // },
+  advanced: {
+    defaultCookieAttributes: {
+      sameSite: 'none',
+      secure: true,
+      httpOnly: true,
+      path: '/',
+    },
+    cookies: {
+      state: {
+        attributes: {
+          sameSite: 'none',
+          secure: true,
+          path: '/',
+        },
+      },
+    },
+    trustProxy: true,
+  },
+  secret: 'thisisasecretforbetterauth',
 });
