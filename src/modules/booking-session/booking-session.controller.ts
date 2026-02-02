@@ -6,7 +6,6 @@ const CreateSession = catchAsync(async (req: Request, res: Response) => {
   const bookingPayload = req.body;
   bookingPayload.studentId = req.user?.id;
   const result = await BookingSessionService.CreateSession(bookingPayload);
-  console.log("result",result)
   res.status(201).json({
     success: true,
     message: 'Booking Session Created Successfully',

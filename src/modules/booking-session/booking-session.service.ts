@@ -92,7 +92,6 @@ const GetAllBooking = async (studentId: string) => {
   return flatBookings;
 };
 const GetAllBookingByTutorId = async (tutorId: string) => {
-  console.log(tutorId)
   const bookings = await prisma.booking.findMany({
     where: { tutorId },
     include: {

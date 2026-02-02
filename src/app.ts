@@ -8,7 +8,7 @@ import { globalErrorHandler } from './middlewares/globalErrorHandler';
 const app = express();
 app.use(
   cors({
-    origin: 'http://localhost:3000',
+    origin: 'https://skill-bridge-sooty-five.vercel.app',
     credentials: true,
   }),
 );

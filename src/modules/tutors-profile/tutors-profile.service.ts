@@ -14,7 +14,6 @@ export const GetAllTutors = async (queryData: TutorQuery) => {
   const skip = (pageNumber - 1) * limitNumber;
 
   const andConditions: any[] = [];
-  console.log(category, search, page , limit );
   if (category?.trim() && category.trim().toLowerCase() !== 'all') {
     const trimmedCat = category.trim();
     andConditions.push({
@@ -34,7 +33,6 @@ export const GetAllTutors = async (queryData: TutorQuery) => {
       },
     });
   }
-console.log(andConditions)
   if (search?.trim()) {
     const trimmed = search.trim();
     const num = Number(trimmed);
@@ -165,7 +163,7 @@ const GetTutorProfileById = async (tutorId: string) => {
       reviews: {
         select: {
           rating: true,
-          comment: true, 
+          comment: true,
           student: {
             select: {
               name: true,

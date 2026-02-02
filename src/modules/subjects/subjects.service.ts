@@ -17,7 +17,6 @@ const UpdateSubject = async (
   subjectId: string,
   subjectPayload: Partial<Subject>,
 ) => {
-  console.log(subjectId,subjectPayload)
   const result = await prisma.subject.update({
     where: { id: subjectId },
     data: subjectPayload,
