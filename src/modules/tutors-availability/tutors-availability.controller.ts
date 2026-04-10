@@ -12,7 +12,7 @@ const GetAllAvailability = catchAsync(async (req: Request, res: Response) => {
 })
 const GetTutorAvailabilityByTutorId = catchAsync(
   async (req: Request, res: Response) => {
-    const tutorId = req.params.availabilityId;
+    const tutorId = req.params.tutorId;
     const result =
       await TutorsAvailabilityService.GetTutorAvailabilityByTutorId(
         tutorId as string,

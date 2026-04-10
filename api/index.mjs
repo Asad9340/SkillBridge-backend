@@ -854,7 +854,7 @@ var GetAllAvailability2 = catchAsync(async (req, res) => {
 });
 var GetTutorAvailabilityByTutorId2 = catchAsync(
   async (req, res) => {
-    const tutorId = req.params.availabilityId;
+    const tutorId = req.params.tutorId;
     const result = await TutorsAvailabilityService.GetTutorAvailabilityByTutorId(
       tutorId
     );
