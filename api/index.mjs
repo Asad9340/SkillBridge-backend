@@ -13,6 +13,9 @@ import { bearer, emailOTP } from "better-auth/plugins";
 
 // generated/prisma/enums.ts
 var Role = {
+  SUPER_ADMIN: "SUPER_ADMIN",
+  MANAGER: "MANAGER",
+  ORGANIZER: "ORGANIZER",
   STUDENT: "STUDENT",
   TUTOR: "TUTOR",
   ADMIN: "ADMIN"
@@ -85,6 +88,12 @@ var envVars = {
     CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY || "",
     CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET || ""
   },
+  OPENROUTER: {
+    API_KEY: process.env.OPENROUTER_API_KEY?.trim() || "",
+    API_URL: process.env.OPENROUTER_API_URL?.trim() || "https://openrouter.ai/api/v1/chat/completions",
+    MODEL: process.env.OPENROUTER_MODEL?.trim() || "openai/gpt-4o-mini",
+    FALLBACK_MODEL: process.env.OPENROUTER_FALLBACK_MODEL?.trim() || "deepseek/deepseek-chat-v3-0324:free"
+  },
   IS_PRODUCTION: toBoolean(process.env.NODE_ENV, false)
 };
 
@@ -103,14 +112,14 @@ var config = {
   "clientVersion": "7.3.0",
   "engineVersion": "9d6ad21cbbceab97458517b147a6a09ff43aa735",
   "activeProvider": "postgresql",
-  "inlineSchema": 'enum BookingStatus {\n  PENDING\n  CONFIRMED\n  COMPLETED\n  CANCELLED\n}\n\nmodel Booking {\n  id             String        @id @default(uuid())\n  studentId      String\n  tutorId        String\n  subjectId      String\n  availabilityId String\n  status         BookingStatus @default(PENDING)\n  createdAt      DateTime      @default(now())\n  updatedAt      DateTime      @default(now())\n\n  student      User         @relation("StudentBookings", fields: [studentId], references: [id])\n  tutor        TutorProfile @relation("TutorBookings", fields: [tutorId], references: [id])\n  subject      Subject      @relation(fields: [subjectId], references: [id])\n  availability Availability @relation(fields: [availabilityId], references: [id])\n\n  @@unique([availabilityId])\n}\n\nmodel Review {\n  id        String       @id @default(uuid())\n  student   User         @relation("StudentReviews", fields: [studentId], references: [id])\n  studentId String\n  tutor     TutorProfile @relation("TutorReviews", fields: [tutorId], references: [id])\n  tutorId   String\n  rating    Int          @default(5)\n  comment   String?\n  createdAt DateTime     @default(now())\n  updatedAt DateTime     @updatedAt\n}\n\ngenerator client {\n  provider = "prisma-client"\n  output   = "../../generated/prisma"\n}\n\ndatasource db {\n  provider = "postgresql"\n}\n\nmodel Category {\n  id          String  @id @default(uuid())\n  name        String  @unique\n  description String?\n\n  subjects Subject[]\n}\n\nmodel Subject {\n  id             String         @id @default(uuid())\n  name           String\n  categoryId     String\n  category       Category       @relation(fields: [categoryId], references: [id])\n  tutors         TutorSubject[]\n  bookings       Booking[]\n  availabilities Availability[]\n}\n\nmodel TutorSubject {\n  id        String @id @default(uuid())\n  tutorId   String\n  subjectId String\n\n  tutor   TutorProfile @relation(fields: [tutorId], references: [id])\n  subject Subject      @relation(fields: [subjectId], references: [id])\n\n  @@unique([tutorId, subjectId])\n}\n\nmodel TutorProfile {\n  id           String   @id @default(uuid())\n  userId       String   @unique\n  user         User     @relation(fields: [userId], references: [id])\n  bio          String?\n  hourlyRate   Float\n  rating       Float    @default(0)\n  totalReviews Int      @default(0)\n  createdAt    DateTime @default(now())\n  updatedAt    DateTime @updatedAt\n\n  subjects     TutorSubject[]\n  availability Availability[]\n  bookings     Booking[]      @relation("TutorBookings")\n  reviews      Review[]       @relation("TutorReviews")\n}\n\nmodel Availability {\n  id        String   @id @default(uuid())\n  tutorId   String\n  subjectId String\n  date      DateTime\n  startTime String\n  endTime   String\n  isBooked  Boolean  @default(false)\n\n  tutor   TutorProfile @relation(fields: [tutorId], references: [id])\n  subject Subject      @relation(fields: [subjectId], references: [id])\n  booking Booking?\n\n  @@index([tutorId])\n}\n\nenum Role {\n  STUDENT\n  TUTOR\n  ADMIN\n}\n\nenum UserStatus {\n  ACTIVE\n  INACTIVE\n  SUSPENDED\n}\n\nmodel User {\n  id            String      @id\n  name          String\n  email         String      @unique\n  emailVerified Boolean     @default(false)\n  image         String?\n  role          Role?       @default(STUDENT)\n  phone         String?\n  status        UserStatus? @default(ACTIVE)\n  bio           String?\n  createdAt     DateTime    @default(now())\n  updatedAt     DateTime    @updatedAt\n\n  tutorProfile TutorProfile?\n  bookings     Booking[]     @relation("StudentBookings")\n  reviews      Review[]      @relation("StudentReviews")\n  sessions     Session[]\n  accounts     Account[]\n}\n\nmodel Session {\n  id        String   @id\n  expiresAt DateTime\n  token     String   @unique\n  createdAt DateTime @default(now())\n  updatedAt DateTime @updatedAt\n  ipAddress String?\n  userAgent String?\n  userId    String\n  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)\n}\n\nmodel Account {\n  id                    String    @id\n  accountId             String\n  providerId            String\n  userId                String\n  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)\n  accessToken           String?\n  refreshToken          String?\n  idToken               String?\n  accessTokenExpiresAt  DateTime?\n  refreshTokenExpiresAt DateTime?\n  scope                 String?\n  password              String?\n  createdAt             DateTime  @default(now())\n  updatedAt             DateTime  @updatedAt\n\n  @@index([userId])\n}\n\nmodel Verification {\n  id         String   @id\n  identifier String\n  value      String\n  expiresAt  DateTime\n  createdAt  DateTime @default(now())\n  updatedAt  DateTime @updatedAt\n\n  @@index([identifier])\n}\n',
+  "inlineSchema": 'enum BookingStatus {\n  PENDING\n  CONFIRMED\n  COMPLETED\n  CANCELLED\n}\n\nmodel Booking {\n  id             String        @id @default(uuid())\n  studentId      String\n  tutorId        String\n  subjectId      String\n  availabilityId String\n  status         BookingStatus @default(PENDING)\n  createdAt      DateTime      @default(now())\n  updatedAt      DateTime      @default(now())\n\n  student      User         @relation("StudentBookings", fields: [studentId], references: [id])\n  tutor        TutorProfile @relation("TutorBookings", fields: [tutorId], references: [id])\n  subject      Subject      @relation(fields: [subjectId], references: [id])\n  availability Availability @relation(fields: [availabilityId], references: [id])\n\n  @@unique([availabilityId])\n}\n\nmodel Review {\n  id        String       @id @default(uuid())\n  student   User         @relation("StudentReviews", fields: [studentId], references: [id])\n  studentId String\n  tutor     TutorProfile @relation("TutorReviews", fields: [tutorId], references: [id])\n  tutorId   String\n  rating    Int          @default(5)\n  comment   String?\n  createdAt DateTime     @default(now())\n  updatedAt DateTime     @updatedAt\n}\n\nenum EventStatus {\n  UPCOMING\n  ONGOING\n  COMPLETED\n  CANCELLED\n}\n\nmodel Event {\n  id          String      @id @default(uuid())\n  title       String\n  description String\n  category    String\n  location    String\n  startsAt    DateTime\n  endsAt      DateTime\n  price       Float       @default(0)\n  rating      Float       @default(0)\n  status      EventStatus @default(UPCOMING)\n  mediaUrls   String[]\n  createdAt   DateTime    @default(now())\n  updatedAt   DateTime    @updatedAt\n\n  @@index([category])\n  @@index([status])\n  @@index([startsAt])\n  @@index([location])\n}\n\ngenerator client {\n  provider = "prisma-client"\n  output   = "../../generated/prisma"\n}\n\ndatasource db {\n  provider = "postgresql"\n}\n\nmodel Category {\n  id          String  @id @default(uuid())\n  name        String  @unique\n  description String?\n\n  subjects Subject[]\n}\n\nmodel Subject {\n  id             String         @id @default(uuid())\n  name           String\n  categoryId     String\n  category       Category       @relation(fields: [categoryId], references: [id])\n  tutors         TutorSubject[]\n  bookings       Booking[]\n  availabilities Availability[]\n}\n\nmodel TutorSubject {\n  id        String @id @default(uuid())\n  tutorId   String\n  subjectId String\n\n  tutor   TutorProfile @relation(fields: [tutorId], references: [id])\n  subject Subject      @relation(fields: [subjectId], references: [id])\n\n  @@unique([tutorId, subjectId])\n}\n\nmodel TutorProfile {\n  id           String   @id @default(uuid())\n  userId       String   @unique\n  user         User     @relation(fields: [userId], references: [id])\n  bio          String?\n  hourlyRate   Float\n  rating       Float    @default(0)\n  totalReviews Int      @default(0)\n  createdAt    DateTime @default(now())\n  updatedAt    DateTime @updatedAt\n\n  subjects     TutorSubject[]\n  availability Availability[]\n  bookings     Booking[]      @relation("TutorBookings")\n  reviews      Review[]       @relation("TutorReviews")\n}\n\nmodel Availability {\n  id        String   @id @default(uuid())\n  tutorId   String\n  subjectId String\n  date      DateTime\n  startTime String\n  endTime   String\n  isBooked  Boolean  @default(false)\n\n  tutor   TutorProfile @relation(fields: [tutorId], references: [id])\n  subject Subject      @relation(fields: [subjectId], references: [id])\n  booking Booking?\n\n  @@index([tutorId])\n}\n\nenum Role {\n  SUPER_ADMIN\n  MANAGER\n  ORGANIZER\n  STUDENT\n  TUTOR\n  ADMIN\n}\n\nenum UserStatus {\n  ACTIVE\n  INACTIVE\n  SUSPENDED\n}\n\nmodel User {\n  id            String      @id\n  name          String\n  email         String      @unique\n  emailVerified Boolean     @default(false)\n  image         String?\n  role          Role?       @default(STUDENT)\n  phone         String?\n  status        UserStatus? @default(ACTIVE)\n  bio           String?\n  createdAt     DateTime    @default(now())\n  updatedAt     DateTime    @updatedAt\n\n  tutorProfile TutorProfile?\n  bookings     Booking[]     @relation("StudentBookings")\n  reviews      Review[]      @relation("StudentReviews")\n  sessions     Session[]\n  accounts     Account[]\n}\n\nmodel Session {\n  id        String   @id\n  expiresAt DateTime\n  token     String   @unique\n  createdAt DateTime @default(now())\n  updatedAt DateTime @updatedAt\n  ipAddress String?\n  userAgent String?\n  userId    String\n  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)\n}\n\nmodel Account {\n  id                    String    @id\n  accountId             String\n  providerId            String\n  userId                String\n  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)\n  accessToken           String?\n  refreshToken          String?\n  idToken               String?\n  accessTokenExpiresAt  DateTime?\n  refreshTokenExpiresAt DateTime?\n  scope                 String?\n  password              String?\n  createdAt             DateTime  @default(now())\n  updatedAt             DateTime  @updatedAt\n\n  @@index([userId])\n}\n\nmodel Verification {\n  id         String   @id\n  identifier String\n  value      String\n  expiresAt  DateTime\n  createdAt  DateTime @default(now())\n  updatedAt  DateTime @updatedAt\n\n  @@index([identifier])\n}\n',
   "runtimeDataModel": {
     "models": {},
     "enums": {},
     "types": {}
   }
 };
-config.runtimeDataModel = JSON.parse('{"models":{"Booking":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"studentId","kind":"scalar","type":"String"},{"name":"tutorId","kind":"scalar","type":"String"},{"name":"subjectId","kind":"scalar","type":"String"},{"name":"availabilityId","kind":"scalar","type":"String"},{"name":"status","kind":"enum","type":"BookingStatus"},{"name":"createdAt","kind":"scalar","type":"DateTime"},{"name":"updatedAt","kind":"scalar","type":"DateTime"},{"name":"student","kind":"object","type":"User","relationName":"StudentBookings"},{"name":"tutor","kind":"object","type":"TutorProfile","relationName":"TutorBookings"},{"name":"subject","kind":"object","type":"Subject","relationName":"BookingToSubject"},{"name":"availability","kind":"object","type":"Availability","relationName":"AvailabilityToBooking"}],"dbName":null},"Review":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"student","kind":"object","type":"User","relationName":"StudentReviews"},{"name":"studentId","kind":"scalar","type":"String"},{"name":"tutor","kind":"object","type":"TutorProfile","relationName":"TutorReviews"},{"name":"tutorId","kind":"scalar","type":"String"},{"name":"rating","kind":"scalar","type":"Int"},{"name":"comment","kind":"scalar","type":"String"},{"name":"createdAt","kind":"scalar","type":"DateTime"},{"name":"updatedAt","kind":"scalar","type":"DateTime"}],"dbName":null},"Category":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"name","kind":"scalar","type":"String"},{"name":"description","kind":"scalar","type":"String"},{"name":"subjects","kind":"object","type":"Subject","relationName":"CategoryToSubject"}],"dbName":null},"Subject":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"name","kind":"scalar","type":"String"},{"name":"categoryId","kind":"scalar","type":"String"},{"name":"category","kind":"object","type":"Category","relationName":"CategoryToSubject"},{"name":"tutors","kind":"object","type":"TutorSubject","relationName":"SubjectToTutorSubject"},{"name":"bookings","kind":"object","type":"Booking","relationName":"BookingToSubject"},{"name":"availabilities","kind":"object","type":"Availability","relationName":"AvailabilityToSubject"}],"dbName":null},"TutorSubject":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"tutorId","kind":"scalar","type":"String"},{"name":"subjectId","kind":"scalar","type":"String"},{"name":"tutor","kind":"object","type":"TutorProfile","relationName":"TutorProfileToTutorSubject"},{"name":"subject","kind":"object","type":"Subject","relationName":"SubjectToTutorSubject"}],"dbName":null},"TutorProfile":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"userId","kind":"scalar","type":"String"},{"name":"user","kind":"object","type":"User","relationName":"TutorProfileToUser"},{"name":"bio","kind":"scalar","type":"String"},{"name":"hourlyRate","kind":"scalar","type":"Float"},{"name":"rating","kind":"scalar","type":"Float"},{"name":"totalReviews","kind":"scalar","type":"Int"},{"name":"createdAt","kind":"scalar","type":"DateTime"},{"name":"updatedAt","kind":"scalar","type":"DateTime"},{"name":"subjects","kind":"object","type":"TutorSubject","relationName":"TutorProfileToTutorSubject"},{"name":"availability","kind":"object","type":"Availability","relationName":"AvailabilityToTutorProfile"},{"name":"bookings","kind":"object","type":"Booking","relationName":"TutorBookings"},{"name":"reviews","kind":"object","type":"Review","relationName":"TutorReviews"}],"dbName":null},"Availability":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"tutorId","kind":"scalar","type":"String"},{"name":"subjectId","kind":"scalar","type":"String"},{"name":"date","kind":"scalar","type":"DateTime"},{"name":"startTime","kind":"scalar","type":"String"},{"name":"endTime","kind":"scalar","type":"String"},{"name":"isBooked","kind":"scalar","type":"Boolean"},{"name":"tutor","kind":"object","type":"TutorProfile","relationName":"AvailabilityToTutorProfile"},{"name":"subject","kind":"object","type":"Subject","relationName":"AvailabilityToSubject"},{"name":"booking","kind":"object","type":"Booking","relationName":"AvailabilityToBooking"}],"dbName":null},"User":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"name","kind":"scalar","type":"String"},{"name":"email","kind":"scalar","type":"String"},{"name":"emailVerified","kind":"scalar","type":"Boolean"},{"name":"image","kind":"scalar","type":"String"},{"name":"role","kind":"enum","type":"Role"},{"name":"phone","kind":"scalar","type":"String"},{"name":"status","kind":"enum","type":"UserStatus"},{"name":"bio","kind":"scalar","type":"String"},{"name":"createdAt","kind":"scalar","type":"DateTime"},{"name":"updatedAt","kind":"scalar","type":"DateTime"},{"name":"tutorProfile","kind":"object","type":"TutorProfile","relationName":"TutorProfileToUser"},{"name":"bookings","kind":"object","type":"Booking","relationName":"StudentBookings"},{"name":"reviews","kind":"object","type":"Review","relationName":"StudentReviews"},{"name":"sessions","kind":"object","type":"Session","relationName":"SessionToUser"},{"name":"accounts","kind":"object","type":"Account","relationName":"AccountToUser"}],"dbName":null},"Session":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"expiresAt","kind":"scalar","type":"DateTime"},{"name":"token","kind":"scalar","type":"String"},{"name":"createdAt","kind":"scalar","type":"DateTime"},{"name":"updatedAt","kind":"scalar","type":"DateTime"},{"name":"ipAddress","kind":"scalar","type":"String"},{"name":"userAgent","kind":"scalar","type":"String"},{"name":"userId","kind":"scalar","type":"String"},{"name":"user","kind":"object","type":"User","relationName":"SessionToUser"}],"dbName":null},"Account":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"accountId","kind":"scalar","type":"String"},{"name":"providerId","kind":"scalar","type":"String"},{"name":"userId","kind":"scalar","type":"String"},{"name":"user","kind":"object","type":"User","relationName":"AccountToUser"},{"name":"accessToken","kind":"scalar","type":"String"},{"name":"refreshToken","kind":"scalar","type":"String"},{"name":"idToken","kind":"scalar","type":"String"},{"name":"accessTokenExpiresAt","kind":"scalar","type":"DateTime"},{"name":"refreshTokenExpiresAt","kind":"scalar","type":"DateTime"},{"name":"scope","kind":"scalar","type":"String"},{"name":"password","kind":"scalar","type":"String"},{"name":"createdAt","kind":"scalar","type":"DateTime"},{"name":"updatedAt","kind":"scalar","type":"DateTime"}],"dbName":null},"Verification":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"identifier","kind":"scalar","type":"String"},{"name":"value","kind":"scalar","type":"String"},{"name":"expiresAt","kind":"scalar","type":"DateTime"},{"name":"createdAt","kind":"scalar","type":"DateTime"},{"name":"updatedAt","kind":"scalar","type":"DateTime"}],"dbName":null}},"enums":{},"types":{}}');
+config.runtimeDataModel = JSON.parse('{"models":{"Booking":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"studentId","kind":"scalar","type":"String"},{"name":"tutorId","kind":"scalar","type":"String"},{"name":"subjectId","kind":"scalar","type":"String"},{"name":"availabilityId","kind":"scalar","type":"String"},{"name":"status","kind":"enum","type":"BookingStatus"},{"name":"createdAt","kind":"scalar","type":"DateTime"},{"name":"updatedAt","kind":"scalar","type":"DateTime"},{"name":"student","kind":"object","type":"User","relationName":"StudentBookings"},{"name":"tutor","kind":"object","type":"TutorProfile","relationName":"TutorBookings"},{"name":"subject","kind":"object","type":"Subject","relationName":"BookingToSubject"},{"name":"availability","kind":"object","type":"Availability","relationName":"AvailabilityToBooking"}],"dbName":null},"Review":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"student","kind":"object","type":"User","relationName":"StudentReviews"},{"name":"studentId","kind":"scalar","type":"String"},{"name":"tutor","kind":"object","type":"TutorProfile","relationName":"TutorReviews"},{"name":"tutorId","kind":"scalar","type":"String"},{"name":"rating","kind":"scalar","type":"Int"},{"name":"comment","kind":"scalar","type":"String"},{"name":"createdAt","kind":"scalar","type":"DateTime"},{"name":"updatedAt","kind":"scalar","type":"DateTime"}],"dbName":null},"Event":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"title","kind":"scalar","type":"String"},{"name":"description","kind":"scalar","type":"String"},{"name":"category","kind":"scalar","type":"String"},{"name":"location","kind":"scalar","type":"String"},{"name":"startsAt","kind":"scalar","type":"DateTime"},{"name":"endsAt","kind":"scalar","type":"DateTime"},{"name":"price","kind":"scalar","type":"Float"},{"name":"rating","kind":"scalar","type":"Float"},{"name":"status","kind":"enum","type":"EventStatus"},{"name":"mediaUrls","kind":"scalar","type":"String"},{"name":"createdAt","kind":"scalar","type":"DateTime"},{"name":"updatedAt","kind":"scalar","type":"DateTime"}],"dbName":null},"Category":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"name","kind":"scalar","type":"String"},{"name":"description","kind":"scalar","type":"String"},{"name":"subjects","kind":"object","type":"Subject","relationName":"CategoryToSubject"}],"dbName":null},"Subject":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"name","kind":"scalar","type":"String"},{"name":"categoryId","kind":"scalar","type":"String"},{"name":"category","kind":"object","type":"Category","relationName":"CategoryToSubject"},{"name":"tutors","kind":"object","type":"TutorSubject","relationName":"SubjectToTutorSubject"},{"name":"bookings","kind":"object","type":"Booking","relationName":"BookingToSubject"},{"name":"availabilities","kind":"object","type":"Availability","relationName":"AvailabilityToSubject"}],"dbName":null},"TutorSubject":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"tutorId","kind":"scalar","type":"String"},{"name":"subjectId","kind":"scalar","type":"String"},{"name":"tutor","kind":"object","type":"TutorProfile","relationName":"TutorProfileToTutorSubject"},{"name":"subject","kind":"object","type":"Subject","relationName":"SubjectToTutorSubject"}],"dbName":null},"TutorProfile":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"userId","kind":"scalar","type":"String"},{"name":"user","kind":"object","type":"User","relationName":"TutorProfileToUser"},{"name":"bio","kind":"scalar","type":"String"},{"name":"hourlyRate","kind":"scalar","type":"Float"},{"name":"rating","kind":"scalar","type":"Float"},{"name":"totalReviews","kind":"scalar","type":"Int"},{"name":"createdAt","kind":"scalar","type":"DateTime"},{"name":"updatedAt","kind":"scalar","type":"DateTime"},{"name":"subjects","kind":"object","type":"TutorSubject","relationName":"TutorProfileToTutorSubject"},{"name":"availability","kind":"object","type":"Availability","relationName":"AvailabilityToTutorProfile"},{"name":"bookings","kind":"object","type":"Booking","relationName":"TutorBookings"},{"name":"reviews","kind":"object","type":"Review","relationName":"TutorReviews"}],"dbName":null},"Availability":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"tutorId","kind":"scalar","type":"String"},{"name":"subjectId","kind":"scalar","type":"String"},{"name":"date","kind":"scalar","type":"DateTime"},{"name":"startTime","kind":"scalar","type":"String"},{"name":"endTime","kind":"scalar","type":"String"},{"name":"isBooked","kind":"scalar","type":"Boolean"},{"name":"tutor","kind":"object","type":"TutorProfile","relationName":"AvailabilityToTutorProfile"},{"name":"subject","kind":"object","type":"Subject","relationName":"AvailabilityToSubject"},{"name":"booking","kind":"object","type":"Booking","relationName":"AvailabilityToBooking"}],"dbName":null},"User":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"name","kind":"scalar","type":"String"},{"name":"email","kind":"scalar","type":"String"},{"name":"emailVerified","kind":"scalar","type":"Boolean"},{"name":"image","kind":"scalar","type":"String"},{"name":"role","kind":"enum","type":"Role"},{"name":"phone","kind":"scalar","type":"String"},{"name":"status","kind":"enum","type":"UserStatus"},{"name":"bio","kind":"scalar","type":"String"},{"name":"createdAt","kind":"scalar","type":"DateTime"},{"name":"updatedAt","kind":"scalar","type":"DateTime"},{"name":"tutorProfile","kind":"object","type":"TutorProfile","relationName":"TutorProfileToUser"},{"name":"bookings","kind":"object","type":"Booking","relationName":"StudentBookings"},{"name":"reviews","kind":"object","type":"Review","relationName":"StudentReviews"},{"name":"sessions","kind":"object","type":"Session","relationName":"SessionToUser"},{"name":"accounts","kind":"object","type":"Account","relationName":"AccountToUser"}],"dbName":null},"Session":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"expiresAt","kind":"scalar","type":"DateTime"},{"name":"token","kind":"scalar","type":"String"},{"name":"createdAt","kind":"scalar","type":"DateTime"},{"name":"updatedAt","kind":"scalar","type":"DateTime"},{"name":"ipAddress","kind":"scalar","type":"String"},{"name":"userAgent","kind":"scalar","type":"String"},{"name":"userId","kind":"scalar","type":"String"},{"name":"user","kind":"object","type":"User","relationName":"SessionToUser"}],"dbName":null},"Account":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"accountId","kind":"scalar","type":"String"},{"name":"providerId","kind":"scalar","type":"String"},{"name":"userId","kind":"scalar","type":"String"},{"name":"user","kind":"object","type":"User","relationName":"AccountToUser"},{"name":"accessToken","kind":"scalar","type":"String"},{"name":"refreshToken","kind":"scalar","type":"String"},{"name":"idToken","kind":"scalar","type":"String"},{"name":"accessTokenExpiresAt","kind":"scalar","type":"DateTime"},{"name":"refreshTokenExpiresAt","kind":"scalar","type":"DateTime"},{"name":"scope","kind":"scalar","type":"String"},{"name":"password","kind":"scalar","type":"String"},{"name":"createdAt","kind":"scalar","type":"DateTime"},{"name":"updatedAt","kind":"scalar","type":"DateTime"}],"dbName":null},"Verification":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"identifier","kind":"scalar","type":"String"},{"name":"value","kind":"scalar","type":"String"},{"name":"expiresAt","kind":"scalar","type":"DateTime"},{"name":"createdAt","kind":"scalar","type":"DateTime"},{"name":"updatedAt","kind":"scalar","type":"DateTime"}],"dbName":null}},"enums":{},"types":{}}');
 async function decodeBase64AsWasm(wasmBase64) {
   const { Buffer } = await import("buffer");
   const wasmArray = Buffer.from(wasmBase64, "base64");
@@ -196,16 +205,28 @@ var sendEmail = async ({
 };
 
 // src/app/lib/auth.ts
+var localDevOrigins = [
+  "http://localhost:3000",
+  "http://localhost:3001",
+  "http://localhost:3002",
+  "http://localhost:4000",
+  "http://localhost:5000",
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:3001",
+  "http://127.0.0.1:3002",
+  "http://127.0.0.1:4000",
+  "http://127.0.0.1:5000"
+];
 var trustedOrigins = [
   envVars.BETTER_AUTH_URL,
   envVars.FRONTEND_URL,
   ...envVars.TRUSTED_ORIGINS.split(",").map((origin) => origin.trim()),
-  "http://localhost:3000",
-  "http://localhost:4000",
-  "http://localhost:5000"
+  ...localDevOrigins
 ].filter(Boolean);
+var hasGoogleOAuth = Boolean(envVars.GOOGLE_CLIENT_ID) && Boolean(envVars.GOOGLE_CLIENT_SECRET);
+var betterAuthBaseURL = envVars.NODE_ENV === "production" ? envVars.BETTER_AUTH_URL : `http://localhost:${envVars.PORT}`;
 var auth = betterAuth({
-  baseURL: envVars.BETTER_AUTH_URL,
+  baseURL: betterAuthBaseURL,
   basePath: "/api/auth",
   secret: envVars.BETTER_AUTH_SECRET,
   database: prismaAdapter(prisma, {
@@ -236,9 +257,10 @@ var auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     autoSignIn: false,
-    requireEmailVerification: true
+    // Current frontend has no OTP verification screen. Keep sign-in functional.
+    requireEmailVerification: false
   },
-  socialProviders: {
+  socialProviders: hasGoogleOAuth ? {
     google: {
       clientId: envVars.GOOGLE_CLIENT_ID,
       clientSecret: envVars.GOOGLE_CLIENT_SECRET,
@@ -248,16 +270,16 @@ var auth = betterAuth({
         emailVerified: true
       })
     }
-  },
+  } : void 0,
   emailVerification: {
-    sendOnSignUp: true,
-    sendOnSignIn: true,
-    autoSignInAfterVerification: true
+    sendOnSignUp: false,
+    sendOnSignIn: false,
+    autoSignInAfterVerification: false
   },
   plugins: [
     bearer(),
     emailOTP({
-      overrideDefaultEmailVerification: true,
+      overrideDefaultEmailVerification: false,
       async sendVerificationOTP({ email, otp, type }) {
         const user = await prisma.user.findUnique({
           where: { email }
@@ -326,7 +348,7 @@ var auth = betterAuth({
 });
 
 // src/app/routes/index.ts
-import { Router as Router10 } from "express";
+import { Router as Router12 } from "express";
 
 // src/modules/categories/categories.route.ts
 import { Router } from "express";
@@ -488,6 +510,13 @@ var UpdateUserStatus = async (userId, status) => {
   });
   return result;
 };
+var UpdateUserRole = async (userId, role) => {
+  const result = await prisma.user.update({
+    where: { id: userId },
+    data: { role }
+  });
+  return result;
+};
 var UpdateUserProfile = async (userId, userPayload) => {
   const result = await prisma.user.update({
     where: { id: userId },
@@ -498,6 +527,7 @@ var UpdateUserProfile = async (userId, userPayload) => {
 var UsersService = {
   GetAllUsers,
   UpdateUserStatus,
+  UpdateUserRole,
   UpdateUserProfile
 };
 
@@ -520,10 +550,23 @@ var UpdateUserStatus2 = catchAsync(async (req, res) => {
     data: result
   });
 });
+var UpdateUserRole2 = catchAsync(async (req, res) => {
+  const userId = req.params.userId;
+  const { role } = req.body;
+  const result = await UsersService.UpdateUserRole(userId, role);
+  res.status(200).json({
+    success: true,
+    message: "User role updated successfully",
+    data: result
+  });
+});
 var UpdateUserProfile2 = catchAsync(async (req, res) => {
   const userId = req.params.userId;
   const userPayload = req.body;
-  const result = await UsersService.UpdateUserProfile(userId, userPayload);
+  const result = await UsersService.UpdateUserProfile(
+    userId,
+    userPayload
+  );
   res.status(200).json({
     success: true,
     message: "User updated successfully",
@@ -533,20 +576,37 @@ var UpdateUserProfile2 = catchAsync(async (req, res) => {
 var UsersController = {
   GetAllUsers: GetAllUsers2,
   UpdateUserStatus: UpdateUserStatus2,
+  UpdateUserRole: UpdateUserRole2,
   UpdateUserProfile: UpdateUserProfile2
 };
 
 // src/modules/users/users.route.ts
 var router2 = Router2();
-router2.get("/", auth_default("ADMIN" /* ADMIN */), UsersController.GetAllUsers);
+router2.get(
+  "/",
+  auth_default("ADMIN" /* ADMIN */, "SUPER_ADMIN" /* SUPER_ADMIN */, "MANAGER" /* MANAGER */),
+  UsersController.GetAllUsers
+);
 router2.patch(
   "/:userId",
-  auth_default("ADMIN" /* ADMIN */),
+  auth_default("ADMIN" /* ADMIN */, "SUPER_ADMIN" /* SUPER_ADMIN */),
   UsersController.UpdateUserStatus
 );
 router2.patch(
+  "/:userId/role",
+  auth_default("ADMIN" /* ADMIN */, "SUPER_ADMIN" /* SUPER_ADMIN */),
+  UsersController.UpdateUserRole
+);
+router2.patch(
   "/update-student/:userId",
-  auth_default("STUDENT" /* STUDENT */),
+  auth_default(
+    "STUDENT" /* STUDENT */,
+    "TUTOR" /* TUTOR */,
+    "ORGANIZER" /* ORGANIZER */,
+    "MANAGER" /* MANAGER */,
+    "ADMIN" /* ADMIN */,
+    "SUPER_ADMIN" /* SUPER_ADMIN */
+  ),
   UsersController.UpdateUserProfile
 );
 var UsersRouters = router2;
@@ -1156,6 +1216,67 @@ var StudentProfileService = {
   UpdateStudentProfile
 };
 
+// src/app/config/cloudinary.config.ts
+import { v2 as cloudinary } from "cloudinary";
+cloudinary.config({
+  cloud_name: envVars.CLOUDINARY.CLOUDINARY_CLOUD_NAME,
+  api_key: envVars.CLOUDINARY.CLOUDINARY_API_KEY,
+  api_secret: envVars.CLOUDINARY.CLOUDINARY_API_SECRET
+});
+var assertCloudinaryConfig = () => {
+  if (!envVars.CLOUDINARY.CLOUDINARY_CLOUD_NAME || !envVars.CLOUDINARY.CLOUDINARY_API_KEY || !envVars.CLOUDINARY.CLOUDINARY_API_SECRET) {
+    throw new AppError_default(
+      500,
+      "Cloudinary environment variables are missing. Configure CLOUDINARY_* values."
+    );
+  }
+};
+var uploadFileToCloudinary = async (buffer, fileName) => {
+  assertCloudinaryConfig();
+  if (!buffer || !fileName) {
+    throw new AppError_default(
+      400,
+      "File buffer and file name are required for Cloudinary upload."
+    );
+  }
+  const extension = fileName.split(".").pop()?.toLowerCase();
+  const fileNameWithoutExtension = fileName.split(".").slice(0, -1).join(".").toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9\-]/g, "");
+  const uniqueName = `${Math.random().toString(36).slice(2)}-${Date.now()}-${fileNameWithoutExtension}`;
+  const folder = extension === "pdf" ? "pdfs" : "images";
+  return new Promise((resolve, reject) => {
+    cloudinary.uploader.upload_stream(
+      {
+        resource_type: "auto",
+        public_id: `skill-bridge/${folder}/${uniqueName}`,
+        folder: `skill-bridge/${folder}`
+      },
+      (error, result) => {
+        if (error) {
+          reject(new AppError_default(500, "Failed to upload file to Cloudinary."));
+          return;
+        }
+        resolve(result);
+      }
+    ).end(buffer);
+  });
+};
+var deleteFileFromCloudinary = async (url) => {
+  if (!url) {
+    return;
+  }
+  try {
+    const regex = /\/v\d+\/(.+?)(?:\.[a-zA-Z0-9]+)+$/;
+    const match = url.match(regex);
+    if (match?.[1]) {
+      await cloudinary.uploader.destroy(match[1], {
+        resource_type: "image"
+      });
+    }
+  } catch {
+    throw new AppError_default(500, "Failed to delete file from Cloudinary.");
+  }
+};
+
 // src/modules/user-profile/user-profile.controller.ts
 var UpdateStudentProfile2 = catchAsync(async (req, res) => {
   const studentId = req.params.studentId;
@@ -1170,13 +1291,71 @@ var UpdateStudentProfile2 = catchAsync(async (req, res) => {
     data: result
   });
 });
+var UploadStudentAvatar = catchAsync(async (req, res) => {
+  const studentId = req.params.studentId;
+  const file = req.file;
+  if (!file?.buffer || !file.originalname) {
+    res.status(400).json({
+      success: false,
+      message: "Image file is required"
+    });
+    return;
+  }
+  const uploadedImage = await uploadFileToCloudinary(
+    file.buffer,
+    file.originalname
+  );
+  const result = await StudentProfileService.UpdateStudentProfile(
+    studentId,
+    {
+      image: uploadedImage.secure_url
+    }
+  );
+  res.status(200).json({
+    success: true,
+    message: "Profile image updated Successfully",
+    data: {
+      image: result.image
+    }
+  });
+});
 var StudentProfileController = {
-  UpdateStudentProfile: UpdateStudentProfile2
+  UpdateStudentProfile: UpdateStudentProfile2,
+  UploadStudentAvatar
 };
+
+// src/app/config/multer.config.ts
+import multer from "multer";
+var storage = multer.memoryStorage();
+var upload = multer({ storage });
 
 // src/modules/user-profile/user-profile.route.ts
 var router6 = Router6();
-router6.post("/:studentId", auth_default("STUDENT" /* STUDENT */), StudentProfileController.UpdateStudentProfile);
+router6.patch(
+  "/:studentId",
+  auth_default(
+    "STUDENT" /* STUDENT */,
+    "TUTOR" /* TUTOR */,
+    "ADMIN" /* ADMIN */,
+    "SUPER_ADMIN" /* SUPER_ADMIN */,
+    "MANAGER" /* MANAGER */,
+    "ORGANIZER" /* ORGANIZER */
+  ),
+  StudentProfileController.UpdateStudentProfile
+);
+router6.post(
+  "/:studentId/avatar",
+  auth_default(
+    "STUDENT" /* STUDENT */,
+    "TUTOR" /* TUTOR */,
+    "ADMIN" /* ADMIN */,
+    "SUPER_ADMIN" /* SUPER_ADMIN */,
+    "MANAGER" /* MANAGER */,
+    "ORGANIZER" /* ORGANIZER */
+  ),
+  upload.single("image"),
+  StudentProfileController.UploadStudentAvatar
+);
 var UserProfileRouter = router6;
 
 // src/modules/booking-session/booking-session.route.ts
@@ -1669,23 +1848,365 @@ router9.get(
 );
 router9.get(
   "/admin",
-  auth_default("ADMIN" /* ADMIN */),
+  auth_default("ADMIN" /* ADMIN */, "SUPER_ADMIN" /* SUPER_ADMIN */, "MANAGER" /* MANAGER */),
   AnalyticsController.GetAdminAnalytics
 );
 var AnalyticsRouters = router9;
 
-// src/app/routes/index.ts
+// src/modules/events/events.route.ts
+import { Router as Router10 } from "express";
+
+// src/modules/events/events.service.ts
+var GetAllEvents = async (queryData) => {
+  const {
+    search,
+    category,
+    status,
+    location,
+    minPrice,
+    maxPrice,
+    minRating,
+    dateFrom,
+    dateTo,
+    sortBy = "startsAt",
+    sortOrder = "asc",
+    page = "1",
+    limit = "10"
+  } = queryData;
+  const pageNumber = Math.max(1, Number(page) || 1);
+  const limitNumber = Math.min(50, Math.max(1, Number(limit) || 10));
+  const skip = (pageNumber - 1) * limitNumber;
+  const where = {};
+  if (search?.trim()) {
+    const value = search.trim();
+    where.OR = [
+      { title: { contains: value, mode: "insensitive" } },
+      { description: { contains: value, mode: "insensitive" } },
+      { category: { contains: value, mode: "insensitive" } },
+      { location: { contains: value, mode: "insensitive" } }
+    ];
+  }
+  if (category?.trim()) {
+    where.category = { contains: category.trim(), mode: "insensitive" };
+  }
+  if (status?.trim() && status !== "ALL") {
+    where.status = status;
+  }
+  if (location?.trim()) {
+    where.location = { contains: location.trim(), mode: "insensitive" };
+  }
+  if (minRating && !Number.isNaN(Number(minRating))) {
+    where.rating = { gte: Number(minRating) };
+  }
+  if (minPrice && !Number.isNaN(Number(minPrice))) {
+    where.price = { ...where.price || {}, gte: Number(minPrice) };
+  }
+  if (maxPrice && !Number.isNaN(Number(maxPrice))) {
+    where.price = { ...where.price || {}, lte: Number(maxPrice) };
+  }
+  const parsedDateFrom = dateFrom ? new Date(dateFrom) : null;
+  const parsedDateTo = dateTo ? new Date(dateTo) : null;
+  const hasValidDateFrom = Boolean(
+    parsedDateFrom && !Number.isNaN(parsedDateFrom.getTime())
+  );
+  const hasValidDateTo = Boolean(
+    parsedDateTo && !Number.isNaN(parsedDateTo.getTime())
+  );
+  if (hasValidDateFrom || hasValidDateTo) {
+    where.startsAt = {
+      ...hasValidDateFrom ? { gte: parsedDateFrom } : {},
+      ...hasValidDateTo ? { lte: parsedDateTo } : {}
+    };
+  }
+  const allowedSortBy = /* @__PURE__ */ new Set(["startsAt", "price", "rating", "createdAt"]);
+  const safeSortBy = allowedSortBy.has(sortBy) ? sortBy : "startsAt";
+  const safeSortOrder = sortOrder === "desc" ? "desc" : "asc";
+  const [events, total, categories] = await Promise.all([
+    prisma.event.findMany({
+      where,
+      orderBy: { [safeSortBy]: safeSortOrder },
+      skip,
+      take: limitNumber
+    }),
+    prisma.event.count({ where }),
+    prisma.event.findMany({
+      select: { category: true },
+      distinct: ["category"],
+      orderBy: { category: "asc" }
+    })
+  ]);
+  return {
+    meta: {
+      total,
+      page: pageNumber,
+      limit: limitNumber,
+      totalPages: Math.max(1, Math.ceil(total / limitNumber))
+    },
+    filters: {
+      categories: categories.map((item) => item.category)
+    },
+    data: events
+  };
+};
+var CreateEvent = async (payload) => {
+  const result = await prisma.event.create({
+    data: payload
+  });
+  return result;
+};
+var UpdateEvent = async (id, payload) => {
+  const result = await prisma.event.update({
+    where: { id },
+    data: payload
+  });
+  return result;
+};
+var DeleteEvent = async (id) => {
+  await prisma.event.delete({ where: { id } });
+};
+var EventsService = {
+  GetAllEvents,
+  CreateEvent,
+  UpdateEvent,
+  DeleteEvent
+};
+
+// src/modules/events/events.controller.ts
+var GetAllEvents2 = catchAsync(async (req, res) => {
+  const result = await EventsService.GetAllEvents(req.query);
+  res.status(200).json({
+    success: true,
+    message: "Events fetched successfully",
+    data: result
+  });
+});
+var CreateEvent2 = catchAsync(async (req, res) => {
+  const result = await EventsService.CreateEvent(req.body);
+  res.status(201).json({
+    success: true,
+    message: "Event created successfully",
+    data: result
+  });
+});
+var UpdateEvent2 = catchAsync(async (req, res) => {
+  const result = await EventsService.UpdateEvent(
+    req.params.eventId,
+    req.body
+  );
+  res.status(200).json({
+    success: true,
+    message: "Event updated successfully",
+    data: result
+  });
+});
+var DeleteEvent2 = catchAsync(async (req, res) => {
+  await EventsService.DeleteEvent(req.params.eventId);
+  res.status(200).json({
+    success: true,
+    message: "Event deleted successfully"
+  });
+});
+var EventsController = {
+  GetAllEvents: GetAllEvents2,
+  CreateEvent: CreateEvent2,
+  UpdateEvent: UpdateEvent2,
+  DeleteEvent: DeleteEvent2
+};
+
+// src/modules/events/events.route.ts
 var router10 = Router10();
-router10.use("/categories", CategoriesRouters);
-router10.use("/subjects", SubjectsRouters);
-router10.use("/manage-users", UsersRouters);
-router10.use("/student-profile", UserProfileRouter);
-router10.use("/tutors-profile", TutorsProfileRouters);
-router10.use("/tutors-availability", TutorsAvailabilityRoutes);
-router10.use("/booking-session", BookingSessionRouter);
-router10.use("/reviews", ReviewRouters);
-router10.use("/analytics", AnalyticsRouters);
-var IndexRoutes = router10;
+router10.get("/", EventsController.GetAllEvents);
+router10.post("/", auth_default("ADMIN" /* ADMIN */), EventsController.CreateEvent);
+router10.patch("/:eventId", auth_default("ADMIN" /* ADMIN */), EventsController.UpdateEvent);
+router10.delete("/:eventId", auth_default("ADMIN" /* ADMIN */), EventsController.DeleteEvent);
+var EventsRouters = router10;
+
+// src/modules/chatbot/chatbot.route.ts
+import { Router as Router11 } from "express";
+
+// src/modules/chatbot/chatbot.service.ts
+var SKILLBRIDGE_PROMPT = "You are SkillBridge Assistant. Help with tutor discovery, booking prep, learning plans, interview prep, and profile improvements. Keep answers practical, concise, and student-friendly.";
+var normalizeContent = (content) => {
+  if (typeof content === "string") {
+    return content;
+  }
+  if (!Array.isArray(content)) {
+    return "";
+  }
+  return content.map((item) => {
+    if (item && typeof item === "object" && "type" in item && "text" in item && item.type === "text") {
+      return String(item.text || "");
+    }
+    return "";
+  }).join("");
+};
+var requestOpenRouter = async (apiKey, modelName, messages) => {
+  const response = await fetch(envVars.OPENROUTER.API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+      "HTTP-Referer": envVars.FRONTEND_URL,
+      "X-Title": "SkillBridge Assistant"
+    },
+    body: JSON.stringify({
+      model: modelName,
+      messages: [
+        {
+          role: "system",
+          content: SKILLBRIDGE_PROMPT
+        },
+        ...messages
+      ],
+      temperature: 0.45,
+      max_tokens: 280
+    })
+  });
+  const rawBody = await response.text();
+  if (!response.ok) {
+    return {
+      ok: false,
+      statusCode: response.status,
+      modelName,
+      rawBody
+    };
+  }
+  const parsed = JSON.parse(rawBody);
+  const reply = normalizeContent(parsed.choices?.[0]?.message?.content).trim();
+  if (!reply) {
+    return {
+      ok: false,
+      statusCode: 502,
+      modelName,
+      rawBody: "OpenRouter returned empty response."
+    };
+  }
+  return {
+    ok: true,
+    modelName,
+    reply
+  };
+};
+var getReply = async (payload) => {
+  const message = payload.message?.trim() || "";
+  if (!message) {
+    throw new Error("Message is required");
+  }
+  const apiKey = envVars.OPENROUTER.API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      "Chatbot service is not configured. Missing OPENROUTER_API_KEY."
+    );
+  }
+  const history = (payload.history || []).filter((item) => item.content?.trim()).slice(-8).map((item) => ({
+    role: item.role,
+    content: item.content.trim()
+  }));
+  const messages = [
+    ...history,
+    { role: "user", content: message }
+  ];
+  const models = [
+    envVars.OPENROUTER.MODEL,
+    envVars.OPENROUTER.FALLBACK_MODEL
+  ].filter(Boolean);
+  let lastError = null;
+  for (const modelName of models) {
+    const response = await requestOpenRouter(apiKey, modelName, messages);
+    if (response.ok) {
+      return { reply: response.reply };
+    }
+    lastError = `Model ${response.modelName} failed (${response.statusCode}).`;
+  }
+  return {
+    reply: "I am temporarily unavailable. Please try again in a moment. " + (lastError ? `(${lastError})` : "")
+  };
+};
+var ChatbotService = {
+  getReply
+};
+
+// src/modules/chatbot/chatbot.controller.ts
+var sendMessage = catchAsync(async (req, res) => {
+  const payload = req.body;
+  const result = await ChatbotService.getReply(payload);
+  res.status(200).json({
+    success: true,
+    message: "Chatbot response generated successfully",
+    data: result
+  });
+});
+var ChatbotController = {
+  sendMessage
+};
+
+// src/app/middleware/chatbotRateLimit.ts
+var REQUEST_LIMIT = 20;
+var WINDOW_MS = 60 * 1e3;
+var rateStore = /* @__PURE__ */ new Map();
+var getClientIdentifier = (req) => {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string") {
+    return forwarded.split(",")[0]?.trim() || "unknown";
+  }
+  if (Array.isArray(forwarded) && forwarded.length > 0) {
+    return forwarded[0] || "unknown";
+  }
+  return req.ip || "unknown";
+};
+var clearExpiredEntries = (now) => {
+  for (const [key, value] of rateStore.entries()) {
+    if (value.resetAt <= now) {
+      rateStore.delete(key);
+    }
+  }
+};
+var chatbotRateLimit = (req, res, next) => {
+  const now = Date.now();
+  clearExpiredEntries(now);
+  const clientId = getClientIdentifier(req);
+  const currentRecord = rateStore.get(clientId);
+  if (!currentRecord || currentRecord.resetAt <= now) {
+    rateStore.set(clientId, {
+      count: 1,
+      resetAt: now + WINDOW_MS
+    });
+    next();
+    return;
+  }
+  if (currentRecord.count >= REQUEST_LIMIT) {
+    const retryAfterSeconds = Math.max(
+      1,
+      Math.ceil((currentRecord.resetAt - now) / 1e3)
+    );
+    res.setHeader("Retry-After", String(retryAfterSeconds));
+    next(new AppError_default(429, "Too many requests. Please try again shortly."));
+    return;
+  }
+  currentRecord.count += 1;
+  rateStore.set(clientId, currentRecord);
+  next();
+};
+
+// src/modules/chatbot/chatbot.route.ts
+var router11 = Router11();
+router11.post("/message", chatbotRateLimit, ChatbotController.sendMessage);
+var ChatbotRoutes = router11;
+
+// src/app/routes/index.ts
+var router12 = Router12();
+router12.use("/categories", CategoriesRouters);
+router12.use("/subjects", SubjectsRouters);
+router12.use("/manage-users", UsersRouters);
+router12.use("/student-profile", UserProfileRouter);
+router12.use("/tutors-profile", TutorsProfileRouters);
+router12.use("/tutors-availability", TutorsAvailabilityRoutes);
+router12.use("/booking-session", BookingSessionRouter);
+router12.use("/reviews", ReviewRouters);
+router12.use("/analytics", AnalyticsRouters);
+router12.use("/events", EventsRouters);
+router12.use("/chatbot", ChatbotRoutes);
+var IndexRoutes = router12;
 
 // src/app/middleware/globalErrorHandler.ts
 import z from "zod";
@@ -1707,30 +2228,6 @@ var handleZodError = (err) => {
     errorSources,
     statusCode
   };
-};
-
-// src/app/config/cloudinary.config.ts
-import { v2 as cloudinary } from "cloudinary";
-cloudinary.config({
-  cloud_name: envVars.CLOUDINARY.CLOUDINARY_CLOUD_NAME,
-  api_key: envVars.CLOUDINARY.CLOUDINARY_API_KEY,
-  api_secret: envVars.CLOUDINARY.CLOUDINARY_API_SECRET
-});
-var deleteFileFromCloudinary = async (url) => {
-  if (!url) {
-    return;
-  }
-  try {
-    const regex = /\/v\d+\/(.+?)(?:\.[a-zA-Z0-9]+)+$/;
-    const match = url.match(regex);
-    if (match?.[1]) {
-      await cloudinary.uploader.destroy(match[1], {
-        resource_type: "image"
-      });
-    }
-  } catch {
-    throw new AppError_default(500, "Failed to delete file from Cloudinary.");
-  }
 };
 
 // src/app/middleware/globalErrorHandler.ts
@@ -1786,6 +2283,7 @@ var notFound = (req, res) => {
 
 // src/app.ts
 var app = express();
+var LOCAL_ORIGIN_REGEX = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 app.set("query parser", (str) => qs.parse(str));
 app.set("view engine", "ejs");
 app.set("views", path3.resolve(process.cwd(), "src/app/templates"));
@@ -1802,7 +2300,7 @@ app.use(
   cors({
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
-      const isAllowed = allowedOrigins.includes(origin) || /^https:\/\/skill-bridge-backend-nine.*\.vercel\.app$/.test(origin) || /^https:\/\/.*\.vercel\.app$/.test(origin);
+      const isAllowed = allowedOrigins.includes(origin) || LOCAL_ORIGIN_REGEX.test(origin) || /^https:\/\/skill-bridge-backend-nine.*\.vercel\.app$/.test(origin) || /^https:\/\/.*\.vercel\.app$/.test(origin);
       if (isAllowed) {
         callback(null, true);
       } else {
@@ -1811,7 +2309,13 @@ app.use(
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"]
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Accept",
+      "Origin"
+    ]
   })
 );
 app.use(express.urlencoded({ extended: true }));
