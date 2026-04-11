@@ -256,9 +256,9 @@ var auth = betterAuth({
   },
   emailAndPassword: {
     enabled: true,
-    autoSignIn: false,
+    autoSignIn: true,
     // Enable email verification for better security
-    requireEmailVerification: true
+    requireEmailVerification: false
   },
   socialProviders: hasGoogleOAuth ? {
     google: {
@@ -272,9 +272,9 @@ var auth = betterAuth({
     }
   } : void 0,
   emailVerification: {
-    sendOnSignUp: true,
-    sendOnSignIn: true,
-    autoSignInAfterVerification: true
+    sendOnSignUp: false,
+    sendOnSignIn: false,
+    autoSignInAfterVerification: false
   },
   plugins: [
     bearer(),
@@ -323,8 +323,21 @@ var auth = betterAuth({
     }
   },
   trustedOrigins,
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (user) => {
+          return {
+            data: {
+              ...user,
+              emailVerified: true
+            }
+          };
+        }
+      }
+    }
+  },
   advanced: {
-    trustProxy: true,
     useSecureCookies: envVars.NODE_ENV === "production",
     cookies: {
       state: {
