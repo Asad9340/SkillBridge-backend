@@ -1,5 +1,5 @@
 import { User } from '../../../generated/prisma/client';
-import { UserStatus } from '../../../generated/prisma/enums';
+import { Role, UserStatus } from '../../../generated/prisma/enums';
 import { prisma } from '../../../lib/prisma';
 
 const GetAllUsers = async () => {
@@ -14,6 +14,15 @@ const UpdateUserStatus = async (userId: string, status: UserStatus) => {
   });
   return result;
 };
+
+const UpdateUserRole = async (userId: string, role: Role) => {
+  const result = await prisma.user.update({
+    where: { id: userId },
+    data: { role },
+  });
+  return result;
+};
+
 const UpdateUserProfile = async (
   userId: string,
   userPayload: Partial<User>,
@@ -27,5 +36,6 @@ const UpdateUserProfile = async (
 export const UsersService = {
   GetAllUsers,
   UpdateUserStatus,
+  UpdateUserRole,
   UpdateUserProfile,
 };

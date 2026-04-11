@@ -16,7 +16,7 @@ router.get(
 );
 router.get(
   '/admin',
-  auth(UserRole.ADMIN),
+  auth(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.MANAGER),
   AnalyticsController.GetAdminAnalytics,
 );
 

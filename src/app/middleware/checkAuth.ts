@@ -1,22 +1,18 @@
 import { NextFunction, Request, Response } from 'express';
-import { auth as betterAuth } from '../app/lib/auth';
-import { prisma } from '../app/lib/prisma';
+import { auth } from '../lib/auth';
+import { prisma } from '../lib/prisma';
 
 export enum UserRole {
-  SUPER_ADMIN = 'SUPER_ADMIN',
-  MANAGER = 'MANAGER',
-  ORGANIZER = 'ORGANIZER',
   STUDENT = 'STUDENT',
   TUTOR = 'TUTOR',
   ADMIN = 'ADMIN',
 }
 
-const auth = (...roles: UserRole[]) => {
+const checkAuth = (...roles: UserRole[]) => {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      // get user session
-      const session = await betterAuth.api.getSession({
-        headers: req.headers as any,
+      const session = await auth.api.getSession({
+        headers: req.headers as HeadersInit,
       });
 
       if (!session) {
@@ -25,21 +21,23 @@ const auth = (...roles: UserRole[]) => {
           message: 'You are not authorized!',
         });
       }
+
       if (!session.user.emailVerified) {
-        const id = session.user.id;
         await prisma.user.update({
-          where: { id },
+          where: { id: session.user.id },
           data: {
             emailVerified: true,
           },
         });
       }
+
       if (session.user.status && session.user.status !== 'ACTIVE') {
         return res.status(403).json({
           success: false,
           message: `Your account is ${session.user.status}. Please contact support!`,
         });
       }
+
       req.user = {
         id: session.user.id,
         email: session.user.email,
@@ -47,18 +45,24 @@ const auth = (...roles: UserRole[]) => {
         role: session.user.role as string,
         emailVerified: session.user.emailVerified,
       };
-      if (roles.length && !roles.includes(req.user.role as UserRole)) {
+
+      if (
+        roles.length &&
+        req.user?.role &&
+        !roles.includes(req.user.role as UserRole)
+      ) {
         return res.status(403).json({
           success: false,
           message:
-            "Forbidden! You don't have permission to access this resources!",
+            "Forbidden! You don't have permission to access this resource!",
         });
       }
+
       next();
-    } catch (err) {
-      next(err);
+    } catch (error) {
+      next(error);
     }
   };
 };
 
-export default auth;
+export default checkAuth;
