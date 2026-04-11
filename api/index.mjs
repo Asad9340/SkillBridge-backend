@@ -1,13 +1,96 @@
 // src/app.ts
 import express from "express";
+import path3 from "path";
+import qs from "qs";
 import { toNodeHandler } from "better-auth/node";
+import cookieParser from "cookie-parser";
+import cors from "cors";
 
-// lib/auth.ts
+// src/app/lib/auth.ts
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import { bearer, emailOTP } from "better-auth/plugins";
 
-// lib/prisma.ts
+// generated/prisma/enums.ts
+var Role = {
+  STUDENT: "STUDENT",
+  TUTOR: "TUTOR",
+  ADMIN: "ADMIN"
+};
+var UserStatus = {
+  ACTIVE: "ACTIVE",
+  INACTIVE: "INACTIVE",
+  SUSPENDED: "SUSPENDED"
+};
+
+// src/app/config/env.config.ts
+import dotenv from "dotenv";
+
+// src/app/errorHelpers/AppError.ts
+var AppError = class extends Error {
+  statusCode;
+  constructor(statusCode, message, stack = "") {
+    super(message);
+    this.statusCode = statusCode;
+    if (stack) {
+      this.stack = stack;
+    } else {
+      Error.captureStackTrace(this, this.constructor);
+    }
+  }
+};
+var AppError_default = AppError;
+
+// src/app/config/env.config.ts
+dotenv.config();
+var required = ["DATABASE_URL"];
+required.forEach((variable) => {
+  if (!process.env[variable]) {
+    throw new AppError_default(
+      500,
+      `Environment variable ${variable} is required but not set in .env file.`
+    );
+  }
+});
+var toBoolean = (value, defaultValue) => {
+  if (!value) {
+    return defaultValue;
+  }
+  const normalized = value.trim().toLowerCase();
+  return !(normalized === "false" || normalized === "0" || normalized === "no");
+};
+var envVars = {
+  NODE_ENV: process.env.NODE_ENV || "development",
+  PORT: process.env.PORT || "5000",
+  DATABASE_URL: process.env.DATABASE_URL,
+  FRONTEND_URL: process.env.FRONTEND_URL?.trim() || process.env.PROD_APP_URL?.trim() || "http://localhost:3000",
+  BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET || "thisisasecretforbetterauth",
+  BETTER_AUTH_URL: process.env.BETTER_AUTH_URL?.trim() || "http://localhost:5000",
+  TRUSTED_ORIGINS: process.env.TRUSTED_ORIGINS?.trim() || process.env.FRONTEND_URL?.trim() || process.env.PROD_APP_URL?.trim() || "http://localhost:3000",
+  GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || "",
+  GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || "",
+  ACCESS_TOKEN_SECRET: process.env.ACCESS_TOKEN_SECRET || process.env.JWT_ACCESS_SECRET || "skillbridge-access-secret",
+  ACCESS_TOKEN_EXPIRES_IN: process.env.ACCESS_TOKEN_EXPIRES_IN || process.env.JWT_ACCESS_EXPIRES_IN || "1d",
+  REFRESH_TOKEN_SECRET: process.env.REFRESH_TOKEN_SECRET || process.env.JWT_REFRESH_SECRET || "skillbridge-refresh-secret",
+  REFRESH_TOKEN_EXPIRES_IN: process.env.REFRESH_TOKEN_EXPIRES_IN || process.env.JWT_REFRESH_EXPIRES_IN || "7d",
+  EMAIL_SENDER: {
+    SMTP_USER: process.env.EMAIL_SENDER_SMTP_USER || process.env.NODEMAILER_GMAIL || "",
+    SMTP_PASS: process.env.EMAIL_SENDER_SMTP_PASS || process.env.NODEMAILER_PASSWORD || "",
+    SMTP_HOST: process.env.EMAIL_SENDER_SMTP_HOST || "smtp.gmail.com",
+    SMTP_PORT: process.env.EMAIL_SENDER_SMTP_PORT || "587",
+    SMTP_FROM: process.env.EMAIL_SENDER_SMTP_FROM || process.env.NODEMAILER_GMAIL || "no-reply@skillbridge.local"
+  },
+  CLOUDINARY: {
+    CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME || "",
+    CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY || "",
+    CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET || ""
+  },
+  IS_PRODUCTION: toBoolean(process.env.NODE_ENV, false)
+};
+
+// src/app/lib/prisma.ts
 import "dotenv/config";
+import { PrismaPg } from "@prisma/adapter-pg";
 
 // generated/prisma/client.ts
 import * as path from "path";
@@ -65,42 +148,75 @@ var defineExtension = runtime2.Extensions.defineExtension;
 globalThis["__dirname"] = path.dirname(fileURLToPath(import.meta.url));
 var PrismaClient = getPrismaClientClass();
 
-// lib/prisma.ts
-import { PrismaPg } from "@prisma/adapter-pg";
-var connectionString = `${process.env.DATABASE_URL}`;
+// src/app/lib/prisma.ts
+var connectionString = envVars.DATABASE_URL;
 var adapter = new PrismaPg({ connectionString });
 var prisma = new PrismaClient({ adapter });
 
-// lib/auth.ts
+// src/app/utils/email.ts
+import nodemailer from "nodemailer";
+import ejs from "ejs";
+import path2 from "path";
+var transporter = nodemailer.createTransport({
+  host: envVars.EMAIL_SENDER.SMTP_HOST,
+  secure: Number(envVars.EMAIL_SENDER.SMTP_PORT) === 465,
+  auth: {
+    user: envVars.EMAIL_SENDER.SMTP_USER,
+    pass: envVars.EMAIL_SENDER.SMTP_PASS
+  },
+  port: Number(envVars.EMAIL_SENDER.SMTP_PORT)
+});
+var sendEmail = async ({
+  to,
+  subject,
+  templateName,
+  templateData,
+  attachments
+}) => {
+  try {
+    const templatePath = path2.resolve(
+      process.cwd(),
+      `src/app/templates/${templateName}.ejs`
+    );
+    const html = await ejs.renderFile(templatePath, templateData);
+    await transporter.sendMail({
+      from: envVars.EMAIL_SENDER.SMTP_FROM,
+      to,
+      subject,
+      html,
+      attachments: attachments?.map((attachment) => ({
+        filename: attachment.filename,
+        content: attachment.content,
+        contentType: attachment.contentType
+      }))
+    });
+  } catch (error) {
+    throw new AppError_default(500, "Failed to send email.");
+  }
+};
+
+// src/app/lib/auth.ts
+var trustedOrigins = [
+  envVars.BETTER_AUTH_URL,
+  envVars.FRONTEND_URL,
+  ...envVars.TRUSTED_ORIGINS.split(",").map((origin) => origin.trim()),
+  "http://localhost:3000",
+  "http://localhost:4000",
+  "http://localhost:5000"
+].filter(Boolean);
 var auth = betterAuth({
-  baseURL: "https://skill-bridge-sooty-five.vercel.app/api/auth",
+  baseURL: envVars.BETTER_AUTH_URL,
+  basePath: "/api/auth",
+  secret: envVars.BETTER_AUTH_SECRET,
   database: prismaAdapter(prisma, {
     provider: "postgresql"
   }),
-  // trustedOrigins: [process.env.TRUSTED_ORIGINS || 'http://localhost:5000'],
-  trustedOrigins: async (request) => {
-    const origin = request?.headers.get("origin");
-    const allowedOrigins2 = [
-      process.env.TRUSTED_ORIGINS,
-      process.env.BETTER_AUTH_URL,
-      "http://localhost:3000",
-      "http://localhost:4000",
-      "http://localhost:5000",
-      "https://skill-bridge-backend-nine.vercel.app",
-      "https://skill-bridge-sooty-five.vercel.app"
-    ].filter(Boolean);
-    if (!origin || allowedOrigins2.includes(origin) || /^https:\/\/.*\.vercel\.app$/.test(origin)) {
-      return [origin];
-    }
-    return [];
-  },
-  basePath: "/api/auth",
   user: {
     additionalFields: {
       role: {
         type: "string",
-        defaultValue: "STUDENT",
-        required: false
+        required: true,
+        defaultValue: Role.STUDENT
       },
       phone: {
         type: "string",
@@ -108,8 +224,8 @@ var auth = betterAuth({
       },
       status: {
         type: "string",
-        defaultValue: "ACTIVE",
-        required: false
+        required: true,
+        defaultValue: UserStatus.ACTIVE
       },
       bio: {
         type: "string",
@@ -120,108 +236,96 @@ var auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     autoSignIn: false,
-    requireEmailVerification: false
-  },
-  emailVerification: {
-    sendOnSignUp: true,
-    autoSignInAfterVerification: true
-    // sendVerificationEmail: async ({ user, url, token }, request) => {
-    //   try {
-    //     const verificationUrl = `${url}/verify-email?token=${token}`;
-    //     await transporter.sendMail({
-    //       from: '"Level 2" <no-reply@yourapp.com>',
-    //       to: user.email,
-    //       subject: 'Verify your email address',
-    //       html: `
-    //               <!DOCTYPE html>
-    //               <html>
-    //               <head>
-    //                 <meta charset="UTF-8" />
-    //                 <title>Verify Email</title>
-    //               </head>
-    //               <body style="margin:0;padding:0;background:#f4f6f8;font-family:Arial">
-    //                 <table width="100%" cellpadding="0" cellspacing="0">
-    //                   <tr>
-    //                     <td align="center">
-    //                       <table width="600" style="background:#ffffff;border-radius:8px;padding:32px">
-    //                         <tr>
-    //                           <td>
-    //                             <h2>Hello ${user.name || 'there'},</h2>
-    //                             <p>Please verify your email address.</p>
-    //                             <p style="margin:24px 0">
-    //                               <a href="${verificationUrl}"
-    //                                 style="background:#4f46e5;color:#ffffff;
-    //                                         padding:14px 28px;border-radius:6px;
-    //                                         text-decoration:none;font-weight:bold">
-    //                                 Verify Email
-    //                               </a>
-    //                             </p>
-    //                             <p>If the button doesn’t work, use this link:</p>
-    //                             <p>${verificationUrl}</p>
-    //                             <p>This link expires in <strong>15 minutes</strong>.</p>
-    //                           </td>
-    //                         </tr>
-    //                       </table>
-    //                     </td>
-    //                   </tr>
-    //                 </table>
-    //               </body>
-    //               </html>
-    //     `,
-    //     });
-    //   } catch (error) {
-    //     console.error('Error sending verification email:', error);
-    //     throw new Error('Could not send verification email');
-    //   }
-    // },
+    requireEmailVerification: true
   },
   socialProviders: {
     google: {
-      prompt: "select_account consent",
-      accessType: "offline",
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET
+      clientId: envVars.GOOGLE_CLIENT_ID,
+      clientSecret: envVars.GOOGLE_CLIENT_SECRET,
+      mapProfileToUser: () => ({
+        role: Role.STUDENT,
+        status: UserStatus.ACTIVE,
+        emailVerified: true
+      })
     }
   },
-  // session: {
-  //   cookieCache: {
-  //     enabled: true,
-  //     maxAge: 5 * 60, // 5 minutes
-  //   },
-  // },
-  // advanced: {
-  //   cookiePrefix: 'better-auth',
-  //   useSecureCookies: process.env.NODE_ENV === 'production',
-  //   crossSubDomainCookies: {
-  //     enabled: false,
-  //   },
-  //   disableCSRFCheck: true,
-  // },
+  emailVerification: {
+    sendOnSignUp: true,
+    sendOnSignIn: true,
+    autoSignInAfterVerification: true
+  },
+  plugins: [
+    bearer(),
+    emailOTP({
+      overrideDefaultEmailVerification: true,
+      async sendVerificationOTP({ email, otp, type }) {
+        const user = await prisma.user.findUnique({
+          where: { email }
+        });
+        if (!user) {
+          return;
+        }
+        if (type === "email-verification" && !user.emailVerified) {
+          await sendEmail({
+            to: email,
+            subject: "Verify your SkillBridge email",
+            templateName: "otp",
+            templateData: {
+              name: user.name,
+              otp
+            }
+          });
+        }
+        if (type === "forget-password") {
+          await sendEmail({
+            to: email,
+            subject: "SkillBridge password reset OTP",
+            templateName: "otp",
+            templateData: {
+              name: user.name,
+              otp
+            }
+          });
+        }
+      },
+      expiresIn: 2 * 60,
+      otpLength: 6
+    })
+  ],
+  session: {
+    expiresIn: 60 * 60 * 24,
+    updateAge: 60 * 60 * 24,
+    cookieCache: {
+      enabled: true,
+      maxAge: 60 * 60 * 24
+    }
+  },
+  trustedOrigins,
   advanced: {
-    defaultCookieAttributes: {
-      sameSite: "none",
-      secure: true,
-      httpOnly: true,
-      path: "/"
-    },
+    trustProxy: true,
+    useSecureCookies: envVars.NODE_ENV === "production",
     cookies: {
       state: {
         attributes: {
-          sameSite: "none",
-          secure: true,
+          sameSite: envVars.NODE_ENV === "production" ? "none" : "lax",
+          secure: envVars.NODE_ENV === "production",
+          httpOnly: true,
+          path: "/"
+        }
+      },
+      sessionToken: {
+        attributes: {
+          sameSite: envVars.NODE_ENV === "production" ? "none" : "lax",
+          secure: envVars.NODE_ENV === "production",
+          httpOnly: true,
           path: "/"
         }
       }
-    },
-    trustProxy: true
-  },
-  secret: "thisisasecretforbetterauth"
+    }
+  }
 });
 
-// src/app.ts
-import cors from "cors";
-
-// src/router/router.ts
+// src/app/routes/index.ts
 import { Router as Router10 } from "express";
 
 // src/modules/categories/categories.route.ts
@@ -1079,7 +1183,7 @@ var UserProfileRouter = router6;
 import { Router as Router7 } from "express";
 
 // src/errors/AppError.ts
-var AppError = class extends Error {
+var AppError2 = class extends Error {
   statusCode;
   errors;
   constructor(statusCode, message, errors) {
@@ -1102,7 +1206,7 @@ var CreateSession = async (payload) => {
       }
     });
     if (!slot) {
-      throw new AppError(404, "Slot not available");
+      throw new AppError2(404, "Slot not available");
     }
     const newBooking = await tx.booking.create({
       data: {
@@ -1570,7 +1674,7 @@ router9.get(
 );
 var AnalyticsRouters = router9;
 
-// src/router/router.ts
+// src/app/routes/index.ts
 var router10 = Router10();
 router10.use("/categories", CategoriesRouters);
 router10.use("/subjects", SubjectsRouters);
@@ -1581,23 +1685,115 @@ router10.use("/tutors-availability", TutorsAvailabilityRoutes);
 router10.use("/booking-session", BookingSessionRouter);
 router10.use("/reviews", ReviewRouters);
 router10.use("/analytics", AnalyticsRouters);
+var IndexRoutes = router10;
 
-// src/middlewares/globalErrorHandler.ts
-var globalErrorHandler = (err, req, res, next) => {
-  const statusCode = err.statusCode || 500;
-  res.status(statusCode).json({
+// src/app/middleware/globalErrorHandler.ts
+import z from "zod";
+
+// src/app/errorHelpers/handleZodError.ts
+var handleZodError = (err) => {
+  const statusCode = 400;
+  const message = "Zod Validation Error";
+  const errorSources = [];
+  err.issues.forEach((issue) => {
+    errorSources.push({
+      path: issue.path.join(" => "),
+      message: issue.message
+    });
+  });
+  return {
     success: false,
-    message: err.message || "Something went wrong",
-    errors: err.errors || null
+    message,
+    errorSources,
+    statusCode
+  };
+};
+
+// src/app/config/cloudinary.config.ts
+import { v2 as cloudinary } from "cloudinary";
+cloudinary.config({
+  cloud_name: envVars.CLOUDINARY.CLOUDINARY_CLOUD_NAME,
+  api_key: envVars.CLOUDINARY.CLOUDINARY_API_KEY,
+  api_secret: envVars.CLOUDINARY.CLOUDINARY_API_SECRET
+});
+var deleteFileFromCloudinary = async (url) => {
+  if (!url) {
+    return;
+  }
+  try {
+    const regex = /\/v\d+\/(.+?)(?:\.[a-zA-Z0-9]+)+$/;
+    const match = url.match(regex);
+    if (match?.[1]) {
+      await cloudinary.uploader.destroy(match[1], {
+        resource_type: "image"
+      });
+    }
+  } catch {
+    throw new AppError_default(500, "Failed to delete file from Cloudinary.");
+  }
+};
+
+// src/app/middleware/globalErrorHandler.ts
+var globalErrorHandler = async (err, req, res, _next) => {
+  if (req.file?.path) {
+    await deleteFileFromCloudinary(req.file.path);
+  }
+  if (Array.isArray(req.files) && req.files.length > 0) {
+    const imageUrls = req.files.map((file) => "path" in file ? file.path : "").filter(Boolean);
+    await Promise.all(imageUrls.map((url) => deleteFileFromCloudinary(url)));
+  }
+  let statusCode = 500;
+  let message = "Internal Server Error";
+  let stack;
+  let errorSources = [];
+  if (err instanceof AppError_default) {
+    statusCode = err.statusCode;
+    message = err.message;
+    stack = err.stack;
+    errorSources = [{ path: "", message: err.message }];
+  } else if (err instanceof z.ZodError) {
+    const simplifiedError = handleZodError(err);
+    statusCode = simplifiedError.statusCode || 400;
+    message = simplifiedError.message;
+    errorSources = simplifiedError.errorSources;
+  } else if (err instanceof Error) {
+    message = err.message;
+    stack = err.stack;
+    errorSources = [{ path: "", message: err.message }];
+  }
+  const errorResponse = {
+    statusCode,
+    success: false,
+    message,
+    errorSources
+  };
+  if (envVars.NODE_ENV === "development") {
+    errorResponse.error = err;
+    if (stack) {
+      errorResponse.stack = stack;
+    }
+  }
+  res.status(statusCode).json(errorResponse);
+};
+
+// src/app/middleware/notFound.ts
+var notFound = (req, res) => {
+  res.status(404).json({
+    success: false,
+    message: `Route ${req.originalUrl} Not Found`
   });
 };
 
 // src/app.ts
 var app = express();
+app.set("query parser", (str) => qs.parse(str));
+app.set("view engine", "ejs");
+app.set("views", path3.resolve(process.cwd(), "src/app/templates"));
 app.set("trust proxy", true);
 var allowedOrigins = [
-  "https://skill-bridge-backend-nine.vercel.app",
-  process.env.PROD_APP_URL,
+  envVars.FRONTEND_URL,
+  envVars.BETTER_AUTH_URL,
+  ...envVars.TRUSTED_ORIGINS.split(",").map((origin) => origin.trim()),
   "http://localhost:3000",
   "http://localhost:4000",
   "http://localhost:5000"
@@ -1615,20 +1811,22 @@ app.use(
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "Cookie"],
-    exposedHeaders: ["Set-Cookie"]
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"]
   })
 );
+app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
-app.all("/api/auth/*splat", toNodeHandler(auth));
+app.use(cookieParser());
+app.use("/api/auth", toNodeHandler(auth));
 app.get("/", (req, res) => {
   res.status(200).json({
     success: true,
     message: "Connect with Expert Tutors, Learn Anything"
   });
 });
-app.use("/api/v1", router10);
+app.use("/api/v1", IndexRoutes);
 app.use(globalErrorHandler);
+app.use(notFound);
 var app_default = app;
 
 // src/index.ts

@@ -1,4 +1,7 @@
 enum Role {
+  SUPER_ADMIN
+  MANAGER
+  ORGANIZER
   STUDENT
   TUTOR
   ADMIN
