@@ -66,8 +66,8 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     autoSignIn: false,
-    // Current frontend has no OTP verification screen. Keep sign-in functional.
-    requireEmailVerification: false,
+    // Enable email verification for better security
+    requireEmailVerification: true,
   },
   socialProviders: hasGoogleOAuth
     ? {
@@ -83,9 +83,9 @@ export const auth = betterAuth({
       }
     : undefined,
   emailVerification: {
-    sendOnSignUp: false,
-    sendOnSignIn: false,
-    autoSignInAfterVerification: false,
+    sendOnSignUp: true,
+    sendOnSignIn: true,
+    autoSignInAfterVerification: true,
   },
   plugins: [
     bearer(),
