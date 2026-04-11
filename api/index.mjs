@@ -361,7 +361,7 @@ var auth = betterAuth({
 });
 
 // src/app/routes/index.ts
-import { Router as Router12 } from "express";
+import { Router as Router13 } from "express";
 
 // src/modules/categories/categories.route.ts
 import { Router } from "express";
@@ -2206,20 +2206,285 @@ var router11 = Router11();
 router11.post("/message", chatbotRateLimit, ChatbotController.sendMessage);
 var ChatbotRoutes = router11;
 
-// src/app/routes/index.ts
+// src/modules/auth/auth.route.ts
+import { Router as Router12 } from "express";
+
+// src/app/utils/cookie.ts
+var setCookie = (res, key, value, options) => {
+  res.cookie(key, value, options);
+};
+var getCookieOptions = (isProduction) => ({
+  httpOnly: true,
+  secure: isProduction,
+  sameSite: isProduction ? "none" : "lax",
+  path: "/"
+});
+var CookieUtils = {
+  setCookie,
+  getCookieOptions
+};
+
+// src/app/utils/jwt.ts
+import jwt from "jsonwebtoken";
+var createToken = (payload, secret, { expiresIn }) => {
+  const token = jwt.sign(payload, secret, { expiresIn });
+  return token;
+};
+var verifyToken = (token, secret) => {
+  try {
+    const decoded = jwt.verify(token, secret);
+    return {
+      success: true,
+      data: decoded
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: error.message,
+      error
+    };
+  }
+};
+var decodeToken = (token) => {
+  const decoded = jwt.decode(token);
+  return decoded;
+};
+var jwtUtils = {
+  createToken,
+  verifyToken,
+  decodeToken
+};
+
+// src/app/utils/token.ts
+var accessTokenExpiresIn = envVars.ACCESS_TOKEN_EXPIRES_IN;
+var refreshTokenExpiresIn = envVars.REFRESH_TOKEN_EXPIRES_IN;
+var getAccessToken = (payload) => {
+  const accessToken = jwtUtils.createToken(payload, envVars.ACCESS_TOKEN_SECRET, {
+    expiresIn: accessTokenExpiresIn
+  });
+  return accessToken;
+};
+var getRefreshToken = (payload) => {
+  const refreshToken = jwtUtils.createToken(payload, envVars.REFRESH_TOKEN_SECRET, {
+    expiresIn: refreshTokenExpiresIn
+  });
+  return refreshToken;
+};
+var setAccessTokenCookie = (res, token) => {
+  CookieUtils.setCookie(res, "accessToken", token, {
+    httpOnly: true,
+    secure: envVars.NODE_ENV === "production",
+    sameSite: envVars.NODE_ENV === "production" ? "none" : "lax",
+    path: "/",
+    maxAge: 1e3 * 60 * 60 * 24
+  });
+};
+var setRefreshTokenCookie = (res, token) => {
+  CookieUtils.setCookie(res, "refreshToken", token, {
+    httpOnly: true,
+    secure: envVars.NODE_ENV === "production",
+    sameSite: envVars.NODE_ENV === "production" ? "none" : "lax",
+    path: "/",
+    maxAge: 1e3 * 60 * 60 * 24 * 7
+  });
+};
+var setBetterAuthSessionCookie = (res, token) => {
+  CookieUtils.setCookie(res, "better-auth.session_token", token, {
+    httpOnly: true,
+    secure: envVars.NODE_ENV === "production",
+    sameSite: envVars.NODE_ENV === "production" ? "none" : "lax",
+    path: "/",
+    maxAge: 1e3 * 60 * 60 * 24
+  });
+};
+var tokenUtils = {
+  getAccessToken,
+  getRefreshToken,
+  setAccessTokenCookie,
+  setRefreshTokenCookie,
+  setBetterAuthSessionCookie
+};
+
+// src/modules/auth/auth.controller.ts
+var Login = catchAsync(async (req, res) => {
+  const { email, password } = req.body;
+  let signInData;
+  try {
+    signInData = await auth.api.signInEmail({
+      body: { email, password }
+    });
+  } catch (err) {
+    return res.status(401).json({
+      success: false,
+      message: err?.message || "Invalid credentials"
+    });
+  }
+  if (!signInData?.user) {
+    return res.status(401).json({
+      success: false,
+      message: "Invalid credentials"
+    });
+  }
+  const { user, token } = signInData;
+  const jwtPayload = {
+    userId: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    emailVerified: user.emailVerified
+  };
+  const accessToken = tokenUtils.getAccessToken(jwtPayload);
+  const refreshToken = tokenUtils.getRefreshToken(jwtPayload);
+  tokenUtils.setAccessTokenCookie(res, accessToken);
+  tokenUtils.setRefreshTokenCookie(res, refreshToken);
+  tokenUtils.setBetterAuthSessionCookie(res, token);
+  return res.status(200).json({
+    success: true,
+    message: "Login successful",
+    data: {
+      token,
+      accessToken,
+      refreshToken,
+      user
+    }
+  });
+});
+var Register = catchAsync(async (req, res) => {
+  const { name, email, password } = req.body;
+  let signUpData;
+  try {
+    signUpData = await auth.api.signUpEmail({
+      body: { name, email, password }
+    });
+  } catch (err) {
+    return res.status(400).json({
+      success: false,
+      message: err?.message || "Registration failed"
+    });
+  }
+  if (!signUpData?.user) {
+    return res.status(400).json({
+      success: false,
+      message: "Registration failed"
+    });
+  }
+  const { user, token } = signUpData;
+  const jwtPayload = {
+    userId: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    emailVerified: user.emailVerified
+  };
+  const accessToken = tokenUtils.getAccessToken(jwtPayload);
+  const refreshToken = tokenUtils.getRefreshToken(jwtPayload);
+  tokenUtils.setAccessTokenCookie(res, accessToken);
+  tokenUtils.setRefreshTokenCookie(res, refreshToken);
+  tokenUtils.setBetterAuthSessionCookie(res, token);
+  return res.status(201).json({
+    success: true,
+    message: "Registration successful",
+    data: {
+      token,
+      accessToken,
+      refreshToken,
+      user
+    }
+  });
+});
+var GetMe = catchAsync(async (req, res) => {
+  const session = await auth.api.getSession({
+    headers: req.headers
+  });
+  if (!session) {
+    return res.status(401).json({
+      success: false,
+      message: "Not authenticated"
+    });
+  }
+  const { user } = session;
+  return res.status(200).json({
+    success: true,
+    message: "User retrieved successfully",
+    data: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      emailVerified: user.emailVerified,
+      image: user.image,
+      status: user.status
+    }
+  });
+});
+var RefreshToken = catchAsync(async (req, res) => {
+  const webHeaders = new Headers();
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (typeof value === "string") {
+      webHeaders.set(key, value);
+    } else if (Array.isArray(value)) {
+      value.forEach((v) => webHeaders.append(key, v));
+    }
+  }
+  const session = await auth.api.getSession({ headers: webHeaders });
+  if (!session) {
+    return res.status(401).json({
+      success: false,
+      message: "Session expired or invalid. Please log in again."
+    });
+  }
+  const { user } = session;
+  const jwtPayload = {
+    userId: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    emailVerified: user.emailVerified
+  };
+  const accessToken = tokenUtils.getAccessToken(jwtPayload);
+  const refreshToken = tokenUtils.getRefreshToken(jwtPayload);
+  tokenUtils.setAccessTokenCookie(res, accessToken);
+  tokenUtils.setRefreshTokenCookie(res, refreshToken);
+  tokenUtils.setBetterAuthSessionCookie(
+    res,
+    req.cookies?.["better-auth.session_token"] || ""
+  );
+  return res.status(200).json({
+    success: true,
+    message: "Tokens refreshed successfully",
+    data: { accessToken, refreshToken }
+  });
+});
+var AuthController = {
+  Login,
+  Register,
+  GetMe,
+  RefreshToken
+};
+
+// src/modules/auth/auth.route.ts
 var router12 = Router12();
-router12.use("/categories", CategoriesRouters);
-router12.use("/subjects", SubjectsRouters);
-router12.use("/manage-users", UsersRouters);
-router12.use("/student-profile", UserProfileRouter);
-router12.use("/tutors-profile", TutorsProfileRouters);
-router12.use("/tutors-availability", TutorsAvailabilityRoutes);
-router12.use("/booking-session", BookingSessionRouter);
-router12.use("/reviews", ReviewRouters);
-router12.use("/analytics", AnalyticsRouters);
-router12.use("/events", EventsRouters);
-router12.use("/chatbot", ChatbotRoutes);
-var IndexRoutes = router12;
+router12.post("/login", AuthController.Login);
+router12.post("/register", AuthController.Register);
+router12.get("/me", AuthController.GetMe);
+router12.post("/refresh-token", AuthController.RefreshToken);
+var AuthRouters = router12;
+
+// src/app/routes/index.ts
+var router13 = Router13();
+router13.use("/categories", CategoriesRouters);
+router13.use("/subjects", SubjectsRouters);
+router13.use("/manage-users", UsersRouters);
+router13.use("/student-profile", UserProfileRouter);
+router13.use("/tutors-profile", TutorsProfileRouters);
+router13.use("/tutors-availability", TutorsAvailabilityRoutes);
+router13.use("/booking-session", BookingSessionRouter);
+router13.use("/reviews", ReviewRouters);
+router13.use("/analytics", AnalyticsRouters);
+router13.use("/events", EventsRouters);
+router13.use("/chatbot", ChatbotRoutes);
+router13.use("/auth", AuthRouters);
+var IndexRoutes = router13;
 
 // src/app/middleware/globalErrorHandler.ts
 import z from "zod";

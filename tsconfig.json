@@ -9,6 +9,7 @@
     // See also https://aka.ms/tsconfig/module
     "module": "ESNext",
     "moduleResolution": "node",
+    "ignoreDeprecations": "6.0",
     "target": "ES2023",
     "types": [],
     // For nodejs:
@@ -42,7 +43,6 @@
     "esModuleInterop": true,
     "moduleDetection": "force",
     "skipLibCheck": true,
-    "ignoreDeprecations": "5.0"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "src/generated", "prisma.config.ts"]

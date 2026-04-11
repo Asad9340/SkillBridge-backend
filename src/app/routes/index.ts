@@ -10,6 +10,7 @@ import { ReviewRouters } from '../../modules/reviews/reviews.route';
 import { AnalyticsRouters } from '../../modules/analytics/analytics.route';
 import { EventsRouters } from '../../modules/events/events.route';
 import { ChatbotRoutes } from '../../modules/chatbot/chatbot.route';
+import { AuthRouters } from '../../modules/auth/auth.route';
 
 const router = Router();
 
@@ -24,5 +25,6 @@ router.use('/reviews', ReviewRouters);
 router.use('/analytics', AnalyticsRouters);
 router.use('/events', EventsRouters);
 router.use('/chatbot', ChatbotRoutes);
+router.use('/auth', AuthRouters);
 
 export const IndexRoutes = router;
