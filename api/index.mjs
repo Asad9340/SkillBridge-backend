@@ -2431,6 +2431,26 @@ var tokenUtils = {
 };
 
 // src/modules/auth/auth.controller.ts
+var resolveBetterAuthSessionCookie = (cookies) => {
+  const directCandidates = [
+    "better-auth.session_token",
+    "__Secure-better-auth.session_token"
+  ];
+  for (const name of directCandidates) {
+    const value = cookies?.[name];
+    if (typeof value === "string" && value.length > 0) {
+      return { name, value };
+    }
+  }
+  const dynamicMatch = Object.entries(cookies ?? {}).find(
+    ([name, value]) => typeof value === "string" && value.length > 0 && name.endsWith("better-auth.session_token")
+  );
+  if (dynamicMatch) {
+    const [name, value] = dynamicMatch;
+    return { name, value };
+  }
+  return null;
+};
 var Login = catchAsync(async (req, res) => {
   const { email, password } = req.body;
   let signInData;
@@ -2570,10 +2590,10 @@ var RefreshToken = catchAsync(async (req, res) => {
   const refreshToken = tokenUtils.getRefreshToken(jwtPayload);
   tokenUtils.setAccessTokenCookie(res, accessToken);
   tokenUtils.setRefreshTokenCookie(res, refreshToken);
-  tokenUtils.setBetterAuthSessionCookie(
-    res,
-    req.cookies?.["better-auth.session_token"] || ""
+  const sessionCookie = resolveBetterAuthSessionCookie(
+    req.cookies
   );
+  tokenUtils.setBetterAuthSessionCookie(res, sessionCookie?.value || "");
   return res.status(200).json({
     success: true,
     message: "Tokens refreshed successfully",
@@ -2601,13 +2621,16 @@ var LoginWithGoogle = catchAsync(async (req, res) => {
 });
 var GoogleLoginSuccess = catchAsync(async (req, res) => {
   const redirectPath = req.query.redirect || "/dashboard";
-  const sessionToken = req.cookies["better-auth.session_token"];
-  if (!sessionToken) {
+  const sessionCookie = resolveBetterAuthSessionCookie(
+    req.cookies
+  );
+  if (!sessionCookie?.value) {
     return res.redirect(`${envVars.FRONTEND_URL}/login?error=oauth_failed`);
   }
+  const sessionToken = sessionCookie.value;
   const session = await auth.api.getSession({
     headers: new Headers({
-      Cookie: `better-auth.session_token=${sessionToken}`
+      Cookie: `${sessionCookie.name}=${sessionToken}`
     })
   });
   if (!session?.user) {

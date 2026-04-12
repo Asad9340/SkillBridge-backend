@@ -4,6 +4,36 @@ import { auth as betterAuth } from '../../app/lib/auth';
 import { tokenUtils } from '../../app/utils/token';
 import { envVars } from '../../app/config/env.config';
 
+const resolveBetterAuthSessionCookie = (
+  cookies: Record<string, string | undefined> | undefined,
+) => {
+  const directCandidates = [
+    'better-auth.session_token',
+    '__Secure-better-auth.session_token',
+  ];
+
+  for (const name of directCandidates) {
+    const value = cookies?.[name];
+    if (typeof value === 'string' && value.length > 0) {
+      return { name, value };
+    }
+  }
+
+  const dynamicMatch = Object.entries(cookies ?? {}).find(
+    ([name, value]) =>
+      typeof value === 'string' &&
+      value.length > 0 &&
+      name.endsWith('better-auth.session_token'),
+  );
+
+  if (dynamicMatch) {
+    const [name, value] = dynamicMatch;
+    return { name, value };
+  }
+
+  return null;
+};
+
 /**
  * POST /api/v1/auth/login
  * Signs in via Better Auth and returns all three tokens in the JSON body
@@ -192,10 +222,10 @@ const RefreshToken = catchAsync(async (req: Request, res: Response) => {
 
   tokenUtils.setAccessTokenCookie(res, accessToken);
   tokenUtils.setRefreshTokenCookie(res, refreshToken);
-  tokenUtils.setBetterAuthSessionCookie(
-    res,
-    req.cookies?.['better-auth.session_token'] || '',
+  const sessionCookie = resolveBetterAuthSessionCookie(
+    req.cookies as Record<string, string | undefined>,
   );
+  tokenUtils.setBetterAuthSessionCookie(res, sessionCookie?.value || '');
 
   return res.status(200).json({
     success: true,
@@ -249,15 +279,17 @@ const LoginWithGoogle = catchAsync(async (req: Request, res: Response) => {
 const GoogleLoginSuccess = catchAsync(async (req: Request, res: Response) => {
   const redirectPath = (req.query.redirect as string) || '/dashboard';
 
-  const sessionToken = req.cookies['better-auth.session_token'];
-
-  if (!sessionToken) {
+  const sessionCookie = resolveBetterAuthSessionCookie(
+    req.cookies as Record<string, string | undefined>,
+  );
+  if (!sessionCookie?.value) {
     return res.redirect(`${envVars.FRONTEND_URL}/login?error=oauth_failed`);
   }
+  const sessionToken = sessionCookie.value;
 
   const session = await betterAuth.api.getSession({
     headers: new Headers({
-      Cookie: `better-auth.session_token=${sessionToken}`,
+      Cookie: `${sessionCookie.name}=${sessionToken}`,
     }),
   });
 
