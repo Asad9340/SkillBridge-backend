@@ -1,7 +1,7 @@
 import { envVars } from '../../app/config/env.config';
 
 type TChatMessage = {
-  role: 'user' | 'assistant';
+  role: 'system' | 'user' | 'assistant';
   content: string;
 };
 
@@ -57,13 +57,7 @@ const requestOpenRouter = async (
     },
     body: JSON.stringify({
       model: modelName,
-      messages: [
-        {
-          role: 'system',
-          content: SKILLBRIDGE_PROMPT,
-        },
-        ...messages,
-      ],
+      messages,
       temperature: 0.45,
       max_tokens: 280,
     }),
@@ -125,6 +119,10 @@ const getReply = async (payload: {
     }));
 
   const messages: TChatMessage[] = [
+    {
+      role: 'system',
+      content: SKILLBRIDGE_PROMPT,
+    },
     ...history,
     { role: 'user', content: message },
   ];
@@ -152,6 +150,69 @@ const getReply = async (payload: {
   };
 };
 
+const generateStudyPlan = async (payload: {
+  topic?: string;
+  level?: string;
+  days?: number;
+  dailyMinutes?: number;
+  goal?: string;
+}) => {
+  const topic = payload.topic?.trim() || '';
+  if (!topic) {
+    throw new Error('Topic is required');
+  }
+
+  const level = payload.level?.trim() || 'beginner';
+  const days =
+    typeof payload.days === 'number' && payload.days > 0
+      ? Math.min(payload.days, 30)
+      : 14;
+  const dailyMinutes =
+    typeof payload.dailyMinutes === 'number' && payload.dailyMinutes > 0
+      ? Math.min(payload.dailyMinutes, 240)
+      : 60;
+  const goal = payload.goal?.trim() || 'Build consistent progress';
+
+  const planPrompt = [
+    `Create a ${days}-day study plan for: ${topic}.`,
+    `Level: ${level}.`,
+    `Daily time: ${dailyMinutes} minutes.`,
+    `Goal: ${goal}.`,
+    'Return concise markdown with sections: Overview, Day-by-Day Plan, Weekly Checkpoint, Common Mistakes to Avoid.',
+  ].join(' ');
+
+  return getReply({ message: planPrompt, history: [] });
+};
+
+const generateTutorProfileFeedback = async (payload: {
+  bio?: string;
+  subjects?: string;
+  experience?: string;
+  style?: string;
+}) => {
+  const bio = payload.bio?.trim() || '';
+  if (!bio) {
+    throw new Error('Bio is required');
+  }
+
+  const subjects = payload.subjects?.trim() || 'Not specified';
+  const experience = payload.experience?.trim() || 'Not specified';
+  const style = payload.style?.trim() || 'Friendly and practical';
+
+  const reviewPrompt = [
+    'You are helping improve a tutor profile on SkillBridge.',
+    `Current bio: ${bio}`,
+    `Subjects: ${subjects}`,
+    `Experience: ${experience}`,
+    `Teaching style: ${style}`,
+    'Provide: 1) quick critique, 2) rewritten improved bio (120-180 words), 3) 5 profile headline options, 4) 3 trust-building tips.',
+  ].join(' ');
+
+  return getReply({ message: reviewPrompt, history: [] });
+};
+
 export const ChatbotService = {
   getReply,
+  generateStudyPlan,
+  generateTutorProfileFeedback,
 };

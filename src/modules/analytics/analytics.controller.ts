@@ -13,7 +13,9 @@ const GetTutorAnalytics = catchAsync(async (req: Request, res: Response) => {
 });
 const GetStudentAnalytics = catchAsync(async (req: Request, res: Response) => {
   const studentId = req.user?.id;
-  const result = await AnalyticsService.GetStudentAnalytics(studentId as string);
+  const result = await AnalyticsService.GetStudentAnalytics(
+    studentId as string,
+  );
   res.status(200).json({
     success: true,
     message: 'Student analytics fetched successfully',
@@ -30,8 +32,19 @@ const GetAdminAnalytics = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const GetAdminAIInsights = catchAsync(async (req: Request, res: Response) => {
+  const adminId = req.user?.id;
+  const result = await AnalyticsService.GetAdminAIInsights(adminId as string);
+  res.status(200).json({
+    success: true,
+    message: 'Admin AI insights generated successfully',
+    data: result,
+  });
+});
+
 export const AnalyticsController = {
   GetTutorAnalytics,
   GetStudentAnalytics,
   GetAdminAnalytics,
+  GetAdminAIInsights,
 };

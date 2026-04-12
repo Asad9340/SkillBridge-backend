@@ -573,7 +573,9 @@ import { Router as Router2 } from "express";
 
 // src/modules/users/users.service.ts
 var GetAllUsers = async () => {
-  const result = await prisma.user.findMany();
+  const result = await prisma.user.findMany({
+    orderBy: { updatedAt: "desc" }
+  });
   return result;
 };
 var UpdateUserStatus = async (userId, status) => {
@@ -1848,6 +1850,70 @@ var ReviewRouters = router8;
 import { Router as Router9 } from "express";
 
 // src/modules/analytics/analytics.service.ts
+var normalizeContent = (content) => {
+  if (typeof content === "string") {
+    return content;
+  }
+  if (!Array.isArray(content)) {
+    return "";
+  }
+  return content.map((item) => {
+    if (item && typeof item === "object" && "type" in item && "text" in item && item.type === "text") {
+      return String(item.text || "");
+    }
+    return "";
+  }).join("");
+};
+var requestOpenRouter = async (apiKey, modelName, prompt) => {
+  const response = await fetch(envVars.OPENROUTER.API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+      "HTTP-Referer": envVars.FRONTEND_URL,
+      "X-Title": "SkillBridge Admin Insights"
+    },
+    body: JSON.stringify({
+      model: modelName,
+      messages: [
+        {
+          role: "system",
+          content: "You are an operations intelligence assistant for a learning platform. Analyze data and provide practical, low-risk recommendations."
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
+      temperature: 0.25,
+      max_tokens: 420
+    })
+  });
+  const rawBody = await response.text();
+  if (!response.ok) {
+    return {
+      ok: false,
+      statusCode: response.status,
+      modelName,
+      rawBody
+    };
+  }
+  const parsed = JSON.parse(rawBody);
+  const reply = normalizeContent(parsed.choices?.[0]?.message?.content).trim();
+  if (!reply) {
+    return {
+      ok: false,
+      statusCode: 502,
+      modelName,
+      rawBody: "OpenRouter returned empty response."
+    };
+  }
+  return {
+    ok: true,
+    modelName,
+    reply
+  };
+};
 var GetTutorAnalytics = async (tutorId) => {
   const bookingStats = await prisma.booking.groupBy({
     by: ["status"],
@@ -1905,7 +1971,7 @@ var GetStudentAnalytics = async (studentId) => {
   });
   return bookingSummary;
 };
-var GetAdminAnalytics = async (studentId) => {
+var GetAdminAnalytics = async (_adminId) => {
   const bookingStats = await prisma.booking.groupBy({
     by: ["status"],
     _count: { status: true }
@@ -1925,18 +1991,144 @@ var GetAdminAnalytics = async (studentId) => {
     if (item.status === "COMPLETED") bookingSummary.completed = count;
     if (item.status === "CANCELLED") bookingSummary.cancelled = count;
   });
-  const totalTutors = await prisma.tutorProfile.count();
-  const totalStudents = await prisma.user.count();
+  const [
+    totalTutors,
+    totalStudents,
+    totalAdmins,
+    totalManagers,
+    totalOrganizers,
+    totalSuperAdmins,
+    totalUsers
+  ] = await Promise.all([
+    prisma.user.count({ where: { role: Role.TUTOR } }),
+    prisma.user.count({ where: { role: Role.STUDENT } }),
+    prisma.user.count({ where: { role: Role.ADMIN } }),
+    prisma.user.count({ where: { role: Role.MANAGER } }),
+    prisma.user.count({ where: { role: Role.ORGANIZER } }),
+    prisma.user.count({ where: { role: Role.SUPER_ADMIN } }),
+    prisma.user.count()
+  ]);
   return {
     bookingSummary,
     totalTutors,
-    totalStudents
+    totalStudents,
+    totalUsers,
+    roleSummary: {
+      totalAdmins,
+      totalManagers,
+      totalOrganizers,
+      totalSuperAdmins
+    }
+  };
+};
+var GetAdminAIInsights = async (_adminId) => {
+  const twentyOneDaysAgo = /* @__PURE__ */ new Date();
+  twentyOneDaysAgo.setDate(twentyOneDaysAgo.getDate() - 20);
+  const [recentBookings, recentUsers] = await Promise.all([
+    prisma.booking.findMany({
+      where: {
+        createdAt: {
+          gte: twentyOneDaysAgo
+        }
+      },
+      select: {
+        createdAt: true,
+        status: true
+      }
+    }),
+    prisma.user.findMany({
+      orderBy: { updatedAt: "desc" },
+      take: 30,
+      select: {
+        id: true,
+        role: true,
+        status: true,
+        emailVerified: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    })
+  ]);
+  const dailyMap = /* @__PURE__ */ new Map();
+  for (let i = 20; i >= 0; i -= 1) {
+    const d = /* @__PURE__ */ new Date();
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    dailyMap.set(key, 0);
+  }
+  recentBookings.forEach((booking) => {
+    const key = booking.createdAt.toISOString().slice(0, 10);
+    dailyMap.set(key, (dailyMap.get(key) || 0) + 1);
+  });
+  const trendSeries = Array.from(dailyMap.entries()).map(([date, count]) => ({
+    date,
+    count
+  }));
+  const baselineSeries = trendSeries.slice(0, -1).map((item) => item.count);
+  const baselineAvg = baselineSeries.length > 0 ? baselineSeries.reduce((sum, c) => sum + c, 0) / baselineSeries.length : 0;
+  const todayCount = trendSeries[trendSeries.length - 1]?.count || 0;
+  const anomalyFlags = [];
+  if (baselineAvg >= 4 && todayCount >= Math.ceil(baselineAvg * 1.8)) {
+    anomalyFlags.push("Possible booking spike detected in latest day.");
+  }
+  if (baselineAvg >= 4 && todayCount <= Math.floor(baselineAvg * 0.5)) {
+    anomalyFlags.push("Possible booking drop detected in latest day.");
+  }
+  if (anomalyFlags.length === 0) {
+    anomalyFlags.push("No major spike/drop detected by heuristic threshold.");
+  }
+  const summaryPayload = {
+    bookingTrendLast21Days: trendSeries,
+    baselineAverage: Number(baselineAvg.toFixed(2)),
+    latestDayCount: todayCount,
+    anomalyFlags,
+    recentUsers: recentUsers.map((user) => ({
+      id: user.id,
+      role: user.role,
+      status: user.status,
+      emailVerified: user.emailVerified,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt
+    }))
+  };
+  const apiKey = envVars.OPENROUTER.API_KEY;
+  const models = [
+    envVars.OPENROUTER.MODEL,
+    envVars.OPENROUTER.FALLBACK_MODEL
+  ].filter(Boolean);
+  let aiInsightsText = "AI insights are unavailable right now. Please verify OpenRouter configuration.";
+  if (apiKey) {
+    const prompt = [
+      "Analyze the following admin analytics JSON.",
+      "Tasks:",
+      "1) Report booking trend anomalies (spike/drop/normal).",
+      "2) Recommend role/status review actions from recent user activity.",
+      "Rules: Be conservative, do not force automatic demotion/promotion. Mention manual review checks.",
+      "Return markdown with exactly these headings:",
+      "## Anomaly Insights",
+      "## Suggested Role/Status Actions",
+      "## Immediate Next Steps",
+      JSON.stringify(summaryPayload)
+    ].join("\n");
+    for (const modelName of models) {
+      const response = await requestOpenRouter(apiKey, modelName, prompt);
+      if (response.ok) {
+        aiInsightsText = response.reply;
+        break;
+      }
+    }
+  }
+  return {
+    trendSeries,
+    anomalyFlags,
+    aiInsights: aiInsightsText
   };
 };
 var AnalyticsService = {
   GetTutorAnalytics,
   GetStudentAnalytics,
-  GetAdminAnalytics
+  GetAdminAnalytics,
+  GetAdminAIInsights
 };
 
 // src/modules/analytics/analytics.controller.ts
@@ -1951,7 +2143,9 @@ var GetTutorAnalytics2 = catchAsync(async (req, res) => {
 });
 var GetStudentAnalytics2 = catchAsync(async (req, res) => {
   const studentId = req.user?.id;
-  const result = await AnalyticsService.GetStudentAnalytics(studentId);
+  const result = await AnalyticsService.GetStudentAnalytics(
+    studentId
+  );
   res.status(200).json({
     success: true,
     message: "Student analytics fetched successfully",
@@ -1967,10 +2161,20 @@ var GetAdminAnalytics2 = catchAsync(async (req, res) => {
     data: result
   });
 });
+var GetAdminAIInsights2 = catchAsync(async (req, res) => {
+  const adminId = req.user?.id;
+  const result = await AnalyticsService.GetAdminAIInsights(adminId);
+  res.status(200).json({
+    success: true,
+    message: "Admin AI insights generated successfully",
+    data: result
+  });
+});
 var AnalyticsController = {
   GetTutorAnalytics: GetTutorAnalytics2,
   GetStudentAnalytics: GetStudentAnalytics2,
-  GetAdminAnalytics: GetAdminAnalytics2
+  GetAdminAnalytics: GetAdminAnalytics2,
+  GetAdminAIInsights: GetAdminAIInsights2
 };
 
 // src/modules/analytics/analytics.route.ts
@@ -1989,6 +2193,11 @@ router9.get(
   "/admin",
   auth_default("ADMIN" /* ADMIN */, "SUPER_ADMIN" /* SUPER_ADMIN */, "MANAGER" /* MANAGER */),
   AnalyticsController.GetAdminAnalytics
+);
+router9.get(
+  "/admin/ai-insights",
+  auth_default("ADMIN" /* ADMIN */, "SUPER_ADMIN" /* SUPER_ADMIN */, "MANAGER" /* MANAGER */),
+  AnalyticsController.GetAdminAIInsights
 );
 var AnalyticsRouters = router9;
 
@@ -2165,7 +2374,7 @@ import { Router as Router11 } from "express";
 
 // src/modules/chatbot/chatbot.service.ts
 var SKILLBRIDGE_PROMPT = "You are SkillBridge Assistant. Help with tutor discovery, booking prep, learning plans, interview prep, and profile improvements. Keep answers practical, concise, and student-friendly.";
-var normalizeContent = (content) => {
+var normalizeContent2 = (content) => {
   if (typeof content === "string") {
     return content;
   }
@@ -2179,7 +2388,7 @@ var normalizeContent = (content) => {
     return "";
   }).join("");
 };
-var requestOpenRouter = async (apiKey, modelName, messages) => {
+var requestOpenRouter2 = async (apiKey, modelName, messages) => {
   const response = await fetch(envVars.OPENROUTER.API_URL, {
     method: "POST",
     headers: {
@@ -2190,13 +2399,7 @@ var requestOpenRouter = async (apiKey, modelName, messages) => {
     },
     body: JSON.stringify({
       model: modelName,
-      messages: [
-        {
-          role: "system",
-          content: SKILLBRIDGE_PROMPT
-        },
-        ...messages
-      ],
+      messages,
       temperature: 0.45,
       max_tokens: 280
     })
@@ -2211,7 +2414,7 @@ var requestOpenRouter = async (apiKey, modelName, messages) => {
     };
   }
   const parsed = JSON.parse(rawBody);
-  const reply = normalizeContent(parsed.choices?.[0]?.message?.content).trim();
+  const reply = normalizeContent2(parsed.choices?.[0]?.message?.content).trim();
   if (!reply) {
     return {
       ok: false,
@@ -2242,6 +2445,10 @@ var getReply = async (payload) => {
     content: item.content.trim()
   }));
   const messages = [
+    {
+      role: "system",
+      content: SKILLBRIDGE_PROMPT
+    },
     ...history,
     { role: "user", content: message }
   ];
@@ -2251,7 +2458,7 @@ var getReply = async (payload) => {
   ].filter(Boolean);
   let lastError = null;
   for (const modelName of models) {
-    const response = await requestOpenRouter(apiKey, modelName, messages);
+    const response = await requestOpenRouter2(apiKey, modelName, messages);
     if (response.ok) {
       return { reply: response.reply };
     }
@@ -2261,8 +2468,46 @@ var getReply = async (payload) => {
     reply: "I am temporarily unavailable. Please try again in a moment. " + (lastError ? `(${lastError})` : "")
   };
 };
+var generateStudyPlan = async (payload) => {
+  const topic = payload.topic?.trim() || "";
+  if (!topic) {
+    throw new Error("Topic is required");
+  }
+  const level = payload.level?.trim() || "beginner";
+  const days = typeof payload.days === "number" && payload.days > 0 ? Math.min(payload.days, 30) : 14;
+  const dailyMinutes = typeof payload.dailyMinutes === "number" && payload.dailyMinutes > 0 ? Math.min(payload.dailyMinutes, 240) : 60;
+  const goal = payload.goal?.trim() || "Build consistent progress";
+  const planPrompt = [
+    `Create a ${days}-day study plan for: ${topic}.`,
+    `Level: ${level}.`,
+    `Daily time: ${dailyMinutes} minutes.`,
+    `Goal: ${goal}.`,
+    "Return concise markdown with sections: Overview, Day-by-Day Plan, Weekly Checkpoint, Common Mistakes to Avoid."
+  ].join(" ");
+  return getReply({ message: planPrompt, history: [] });
+};
+var generateTutorProfileFeedback = async (payload) => {
+  const bio = payload.bio?.trim() || "";
+  if (!bio) {
+    throw new Error("Bio is required");
+  }
+  const subjects = payload.subjects?.trim() || "Not specified";
+  const experience = payload.experience?.trim() || "Not specified";
+  const style = payload.style?.trim() || "Friendly and practical";
+  const reviewPrompt = [
+    "You are helping improve a tutor profile on SkillBridge.",
+    `Current bio: ${bio}`,
+    `Subjects: ${subjects}`,
+    `Experience: ${experience}`,
+    `Teaching style: ${style}`,
+    "Provide: 1) quick critique, 2) rewritten improved bio (120-180 words), 3) 5 profile headline options, 4) 3 trust-building tips."
+  ].join(" ");
+  return getReply({ message: reviewPrompt, history: [] });
+};
 var ChatbotService = {
-  getReply
+  getReply,
+  generateStudyPlan,
+  generateTutorProfileFeedback
 };
 
 // src/modules/chatbot/chatbot.controller.ts
@@ -2275,8 +2520,30 @@ var sendMessage = catchAsync(async (req, res) => {
     data: result
   });
 });
+var generateStudyPlan2 = catchAsync(async (req, res) => {
+  const payload = req.body;
+  const result = await ChatbotService.generateStudyPlan(payload);
+  res.status(200).json({
+    success: true,
+    message: "Study plan generated successfully",
+    data: result
+  });
+});
+var generateTutorProfileFeedback2 = catchAsync(
+  async (req, res) => {
+    const payload = req.body;
+    const result = await ChatbotService.generateTutorProfileFeedback(payload);
+    res.status(200).json({
+      success: true,
+      message: "Tutor profile feedback generated successfully",
+      data: result
+    });
+  }
+);
 var ChatbotController = {
-  sendMessage
+  sendMessage,
+  generateStudyPlan: generateStudyPlan2,
+  generateTutorProfileFeedback: generateTutorProfileFeedback2
 };
 
 // src/app/middleware/chatbotRateLimit.ts
@@ -2330,6 +2597,16 @@ var chatbotRateLimit = (req, res, next) => {
 // src/modules/chatbot/chatbot.route.ts
 var router11 = Router11();
 router11.post("/message", chatbotRateLimit, ChatbotController.sendMessage);
+router11.post(
+  "/study-plan",
+  chatbotRateLimit,
+  ChatbotController.generateStudyPlan
+);
+router11.post(
+  "/profile-feedback",
+  chatbotRateLimit,
+  ChatbotController.generateTutorProfileFeedback
+);
 var ChatbotRoutes = router11;
 
 // src/modules/auth/auth.route.ts

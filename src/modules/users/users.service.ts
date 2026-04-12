@@ -3,7 +3,9 @@ import { Role, UserStatus } from '../../../generated/prisma/enums';
 import { prisma } from '../../../lib/prisma';
 
 const GetAllUsers = async () => {
-  const result = await prisma.user.findMany();
+  const result = await prisma.user.findMany({
+    orderBy: { updatedAt: 'desc' },
+  });
   return result;
 };
 

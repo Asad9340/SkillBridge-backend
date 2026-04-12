@@ -19,5 +19,10 @@ router.get(
   auth(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.MANAGER),
   AnalyticsController.GetAdminAnalytics,
 );
+router.get(
+  '/admin/ai-insights',
+  auth(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.MANAGER),
+  AnalyticsController.GetAdminAIInsights,
+);
 
 export const AnalyticsRouters = router;
