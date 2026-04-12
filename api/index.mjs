@@ -1362,7 +1362,13 @@ var uploadFileToCloudinary = async (buffer, fileName) => {
       },
       (error, result) => {
         if (error) {
-          reject(new AppError_default(500, "Failed to upload file to Cloudinary."));
+          const cloudinaryMessage = typeof error?.message === "string" && error.message.trim().length > 0 ? error.message : "Unknown Cloudinary error";
+          reject(
+            new AppError_default(
+              500,
+              `Failed to upload file to Cloudinary: ${cloudinaryMessage}`
+            )
+          );
           return;
         }
         resolve(result);
