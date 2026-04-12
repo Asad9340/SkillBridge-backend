@@ -102,7 +102,7 @@ const Register = catchAsync(async (req: Request, res: Response) => {
 
   tokenUtils.setAccessTokenCookie(res, accessToken);
   tokenUtils.setRefreshTokenCookie(res, refreshToken);
-  tokenUtils.setBetterAuthSessionCookie(res, token);
+  tokenUtils.setBetterAuthSessionCookie(res, token ?? '');
 
   return res.status(201).json({
     success: true,

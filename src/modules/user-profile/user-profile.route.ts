@@ -5,6 +5,19 @@ import { upload } from '../../app/config/multer.config';
 
 const router = Router();
 
+router.get(
+  '/:userId',
+  auth(
+    UserRole.STUDENT,
+    UserRole.TUTOR,
+    UserRole.ADMIN,
+    UserRole.SUPER_ADMIN,
+    UserRole.MANAGER,
+    UserRole.ORGANIZER,
+  ),
+  StudentProfileController.GetUserProfile,
+);
+
 router.patch(
   '/:studentId',
   auth(

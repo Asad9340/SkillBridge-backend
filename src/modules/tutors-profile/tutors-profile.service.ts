@@ -5,15 +5,32 @@ export interface TutorQuery {
   search?: string;
   page?: string;
   limit?: string;
+  minPrice?: string;
+  maxPrice?: string;
+  minRating?: string;
+  sortBy?: string; // 'rating' | 'hourlyRate' | 'totalReviews'
+  sortOrder?: string; // 'asc' | 'desc'
 }
 export const GetAllTutors = async (queryData: TutorQuery) => {
-  const { category, search, page = '1', limit = '10' } = queryData;
+  const {
+    category,
+    search,
+    page = '1',
+    limit = '10',
+    minPrice,
+    maxPrice,
+    minRating,
+    sortBy = 'rating',
+    sortOrder = 'desc',
+  } = queryData;
 
   const pageNumber = Math.max(1, Number(page) || 1);
   const limitNumber = Math.min(50, Math.max(1, Number(limit)));
   const skip = (pageNumber - 1) * limitNumber;
 
   const andConditions: any[] = [];
+
+  // Category filter
   if (category?.trim() && category.trim().toLowerCase() !== 'all') {
     const trimmedCat = category.trim();
     andConditions.push({
@@ -33,44 +50,62 @@ export const GetAllTutors = async (queryData: TutorQuery) => {
       },
     });
   }
+
+  // Text search (name, bio, subject)
   if (search?.trim()) {
     const trimmed = search.trim();
-    const num = Number(trimmed);
-
-    if (!isNaN(num)) {
-      andConditions.push({
-        OR: [{ rating: { gte: num } }, { hourlyRate: { equals: num } }],
-      });
-    } else {
-      andConditions.push({
-        OR: [
-          { bio: { contains: trimmed, mode: 'insensitive' } },
-          { user: { name: { contains: trimmed, mode: 'insensitive' } } },
-          {
-            subjects: {
-              some: {
-                subject: {
-                  OR: [
-                    { name: { contains: trimmed, mode: 'insensitive' } },
-                    {
-                      category: {
-                        name: { contains: trimmed, mode: 'insensitive' },
-                      },
+    andConditions.push({
+      OR: [
+        { bio: { contains: trimmed, mode: 'insensitive' } },
+        { user: { name: { contains: trimmed, mode: 'insensitive' } } },
+        {
+          subjects: {
+            some: {
+              subject: {
+                OR: [
+                  { name: { contains: trimmed, mode: 'insensitive' } },
+                  {
+                    category: {
+                      name: { contains: trimmed, mode: 'insensitive' },
                     },
-                  ],
-                },
+                  },
+                ],
               },
             },
           },
-        ],
-      });
+        },
+      ],
+    });
+  }
+
+  // Price range filter
+  if (minPrice || maxPrice) {
+    const priceCondition: any = {};
+    if (minPrice && !isNaN(Number(minPrice)))
+      priceCondition.gte = Number(minPrice);
+    if (maxPrice && !isNaN(Number(maxPrice)))
+      priceCondition.lte = Number(maxPrice);
+    if (Object.keys(priceCondition).length) {
+      andConditions.push({ hourlyRate: priceCondition });
     }
   }
 
-  const whereCondition = andConditions.length ? { AND: andConditions } : {};
+  // Minimum rating filter
+  if (minRating && !isNaN(Number(minRating)) && Number(minRating) > 0) {
+    andConditions.push({ rating: { gte: Number(minRating) } });
+  }
+
+  // Sort configuration
+  const allowedSortFields = ['rating', 'hourlyRate', 'totalReviews'];
+  const sortField = allowedSortFields.includes(sortBy) ? sortBy : 'rating';
+  const order = sortOrder === 'asc' ? 'asc' : 'desc';
+
+  // Always filter to only TUTOR role users
+  andConditions.push({ user: { role: 'TUTOR' } });
+  const whereCondition = { AND: andConditions };
   const [tutors, total] = await Promise.all([
     prisma.tutorProfile.findMany({
-      where: whereCondition,
+      where: whereCondition as any,
       include: {
         user: {
           select: { id: true, name: true, email: true, image: true },
@@ -81,12 +116,12 @@ export const GetAllTutors = async (queryData: TutorQuery) => {
           },
         },
       },
-      orderBy: { rating: 'desc' },
+      orderBy: { [sortField]: order },
       skip,
       take: limitNumber,
     }),
 
-    prisma.tutorProfile.count({ where: whereCondition }),
+    prisma.tutorProfile.count({ where: whereCondition as any }),
   ]);
 
   const data = tutors.map(({ user, subjects, ...tutor }) => ({
@@ -210,10 +245,11 @@ const GetTutorProfileById = async (tutorId: string) => {
   };
 };
 
-
 export const CreateTutorProfile = async (tutorPayload: TutorProfile) => {
-  const tutorProfile = await prisma.tutorProfile.create({
-    data: tutorPayload,
+  const tutorProfile = await prisma.tutorProfile.upsert({
+    where: { userId: tutorPayload.userId },
+    create: tutorPayload,
+    update: {},
   });
 
   await prisma.user.update({

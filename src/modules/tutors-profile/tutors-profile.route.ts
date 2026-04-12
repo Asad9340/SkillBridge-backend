@@ -6,13 +6,10 @@ const router = Router();
 
 router.get('/', TutorsProfileController.GetAllTutors);
 
-router.get(
-  '/:tutorId',
-  TutorsProfileController.GetTutorProfileById,
-);
+router.get('/:tutorId', TutorsProfileController.GetTutorProfileById);
 router.post(
   '/',
-  auth(UserRole.STUDENT),
+  auth(UserRole.STUDENT, UserRole.TUTOR),
   TutorsProfileController.CreateTutorProfile,
 );
 router.patch(

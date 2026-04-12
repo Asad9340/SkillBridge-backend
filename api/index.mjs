@@ -448,39 +448,98 @@ var CategoriesController = {
 };
 
 // src/middlewares/auth.ts
+import jwt from "jsonwebtoken";
+var parseAccessTokenFromHeader = (cookieHeader) => {
+  if (!cookieHeader) return null;
+  const match = cookieHeader.match(/(?:^|;\s*)accessToken=([^;]+)/);
+  return match?.[1] ? decodeURIComponent(match[1]) : null;
+};
 var auth2 = (...roles) => {
   return async (req, res, next) => {
     try {
-      const session = await auth.api.getSession({
-        headers: req.headers
-      });
-      if (!session) {
+      let userId = null;
+      let userRole = null;
+      let userName = "";
+      let userEmail = "";
+      let userEmailVerified = false;
+      let session = null;
+      try {
+        session = await auth.api.getSession({
+          headers: req.headers
+        });
+      } catch {
+      }
+      if (session) {
+        if (session.user.status && session.user.status !== "ACTIVE") {
+          return res.status(403).json({
+            success: false,
+            message: `Your account is ${session.user.status}. Please contact support!`
+          });
+        }
+        if (!session.user.emailVerified) {
+          await prisma.user.update({
+            where: { id: session.user.id },
+            data: { emailVerified: true }
+          });
+        }
+        userId = session.user.id;
+        userRole = session.user.role;
+        userName = session.user.name ?? "";
+        userEmail = session.user.email ?? "";
+        userEmailVerified = session.user.emailVerified ?? false;
+      }
+      if (!userId) {
+        const rawCookie = Array.isArray(req.headers.cookie) ? req.headers.cookie[0] : req.headers.cookie;
+        const accessToken = req.cookies?.accessToken || parseAccessTokenFromHeader(rawCookie);
+        if (accessToken) {
+          try {
+            const decoded = jwt.verify(
+              accessToken,
+              envVars.ACCESS_TOKEN_SECRET
+            );
+            if (decoded?.userId) {
+              const dbUser = await prisma.user.findUnique({
+                where: { id: decoded.userId },
+                select: {
+                  id: true,
+                  email: true,
+                  name: true,
+                  role: true,
+                  status: true,
+                  emailVerified: true
+                }
+              });
+              if (!dbUser) {
+                return res.status(401).json({ success: false, message: "User not found." });
+              }
+              if (dbUser.status !== "ACTIVE") {
+                return res.status(403).json({
+                  success: false,
+                  message: `Your account is ${dbUser.status}. Please contact support!`
+                });
+              }
+              userId = dbUser.id;
+              userRole = dbUser.role;
+              userName = dbUser.name ?? "";
+              userEmail = dbUser.email ?? "";
+              userEmailVerified = dbUser.emailVerified ?? false;
+            }
+          } catch {
+          }
+        }
+      }
+      if (!userId) {
         return res.status(401).json({
           success: false,
           message: "You are not authorized!"
         });
       }
-      if (!session.user.emailVerified) {
-        const id = session.user.id;
-        await prisma.user.update({
-          where: { id },
-          data: {
-            emailVerified: true
-          }
-        });
-      }
-      if (session.user.status && session.user.status !== "ACTIVE") {
-        return res.status(403).json({
-          success: false,
-          message: `Your account is ${session.user.status}. Please contact support!`
-        });
-      }
       req.user = {
-        id: session.user.id,
-        email: session.user.email,
-        name: session.user.name,
-        role: session.user.role,
-        emailVerified: session.user.emailVerified
+        id: userId,
+        email: userEmail,
+        name: userName,
+        role: userRole,
+        emailVerified: userEmailVerified
       };
       if (roles.length && !roles.includes(req.user.role)) {
         return res.status(403).json({
@@ -629,7 +688,17 @@ import { Router as Router3 } from "express";
 
 // src/modules/tutors-profile/tutors-profile.service.ts
 var GetAllTutors = async (queryData) => {
-  const { category, search, page = "1", limit = "10" } = queryData;
+  const {
+    category,
+    search,
+    page = "1",
+    limit = "10",
+    minPrice,
+    maxPrice,
+    minRating,
+    sortBy = "rating",
+    sortOrder = "desc"
+  } = queryData;
   const pageNumber = Math.max(1, Number(page) || 1);
   const limitNumber = Math.min(50, Math.max(1, Number(limit)));
   const skip = (pageNumber - 1) * limitNumber;
@@ -655,37 +724,47 @@ var GetAllTutors = async (queryData) => {
   }
   if (search?.trim()) {
     const trimmed = search.trim();
-    const num = Number(trimmed);
-    if (!isNaN(num)) {
-      andConditions.push({
-        OR: [{ rating: { gte: num } }, { hourlyRate: { equals: num } }]
-      });
-    } else {
-      andConditions.push({
-        OR: [
-          { bio: { contains: trimmed, mode: "insensitive" } },
-          { user: { name: { contains: trimmed, mode: "insensitive" } } },
-          {
-            subjects: {
-              some: {
-                subject: {
-                  OR: [
-                    { name: { contains: trimmed, mode: "insensitive" } },
-                    {
-                      category: {
-                        name: { contains: trimmed, mode: "insensitive" }
-                      }
+    andConditions.push({
+      OR: [
+        { bio: { contains: trimmed, mode: "insensitive" } },
+        { user: { name: { contains: trimmed, mode: "insensitive" } } },
+        {
+          subjects: {
+            some: {
+              subject: {
+                OR: [
+                  { name: { contains: trimmed, mode: "insensitive" } },
+                  {
+                    category: {
+                      name: { contains: trimmed, mode: "insensitive" }
                     }
-                  ]
-                }
+                  }
+                ]
               }
             }
           }
-        ]
-      });
+        }
+      ]
+    });
+  }
+  if (minPrice || maxPrice) {
+    const priceCondition = {};
+    if (minPrice && !isNaN(Number(minPrice)))
+      priceCondition.gte = Number(minPrice);
+    if (maxPrice && !isNaN(Number(maxPrice)))
+      priceCondition.lte = Number(maxPrice);
+    if (Object.keys(priceCondition).length) {
+      andConditions.push({ hourlyRate: priceCondition });
     }
   }
-  const whereCondition = andConditions.length ? { AND: andConditions } : {};
+  if (minRating && !isNaN(Number(minRating)) && Number(minRating) > 0) {
+    andConditions.push({ rating: { gte: Number(minRating) } });
+  }
+  const allowedSortFields = ["rating", "hourlyRate", "totalReviews"];
+  const sortField = allowedSortFields.includes(sortBy) ? sortBy : "rating";
+  const order = sortOrder === "asc" ? "asc" : "desc";
+  andConditions.push({ user: { role: "TUTOR" } });
+  const whereCondition = { AND: andConditions };
   const [tutors, total] = await Promise.all([
     prisma.tutorProfile.findMany({
       where: whereCondition,
@@ -699,7 +778,7 @@ var GetAllTutors = async (queryData) => {
           }
         }
       },
-      orderBy: { rating: "desc" },
+      orderBy: { [sortField]: order },
       skip,
       take: limitNumber
     }),
@@ -815,8 +894,10 @@ var GetTutorProfileById = async (tutorId) => {
   };
 };
 var CreateTutorProfile = async (tutorPayload) => {
-  const tutorProfile = await prisma.tutorProfile.create({
-    data: tutorPayload
+  const tutorProfile = await prisma.tutorProfile.upsert({
+    where: { userId: tutorPayload.userId },
+    create: tutorPayload,
+    update: {}
   });
   await prisma.user.update({
     where: { id: tutorPayload.userId },
@@ -941,13 +1022,10 @@ var TutorsProfileController = {
 // src/modules/tutors-profile/tutors-profile.route.ts
 var router3 = Router3();
 router3.get("/", TutorsProfileController.GetAllTutors);
-router3.get(
-  "/:tutorId",
-  TutorsProfileController.GetTutorProfileById
-);
+router3.get("/:tutorId", TutorsProfileController.GetTutorProfileById);
 router3.post(
   "/",
-  auth_default("STUDENT" /* STUDENT */),
+  auth_default("STUDENT" /* STUDENT */, "TUTOR" /* TUTOR */),
   TutorsProfileController.CreateTutorProfile
 );
 router3.patch(
@@ -1213,6 +1291,24 @@ var SubjectsRouters = router5;
 import { Router as Router6 } from "express";
 
 // src/modules/user-profile/user-profile.service.ts
+var GetUserProfile = async (userId) => {
+  return prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      image: true,
+      role: true,
+      status: true,
+      emailVerified: true,
+      phone: true,
+      bio: true,
+      createdAt: true,
+      updatedAt: true
+    }
+  });
+};
 var UpdateStudentProfile = async (studentId, profilePayload) => {
   const data = {};
   if (profilePayload.name) data.name = profilePayload.name;
@@ -1226,6 +1322,7 @@ var UpdateStudentProfile = async (studentId, profilePayload) => {
   return result;
 };
 var StudentProfileService = {
+  GetUserProfile,
   UpdateStudentProfile
 };
 
@@ -1291,6 +1388,15 @@ var deleteFileFromCloudinary = async (url) => {
 };
 
 // src/modules/user-profile/user-profile.controller.ts
+var GetUserProfile2 = catchAsync(async (req, res) => {
+  const userId = req.params.userId;
+  const result = await StudentProfileService.GetUserProfile(userId);
+  if (!result) {
+    res.status(404).json({ success: false, message: "User not found" });
+    return;
+  }
+  res.status(200).json({ success: true, message: "User profile retrieved", data: result });
+});
 var UpdateStudentProfile2 = catchAsync(async (req, res) => {
   const studentId = req.params.studentId;
   const profilePayload = req.body;
@@ -1333,6 +1439,7 @@ var UploadStudentAvatar = catchAsync(async (req, res) => {
   });
 });
 var StudentProfileController = {
+  GetUserProfile: GetUserProfile2,
   UpdateStudentProfile: UpdateStudentProfile2,
   UploadStudentAvatar
 };
@@ -1344,6 +1451,18 @@ var upload = multer({ storage });
 
 // src/modules/user-profile/user-profile.route.ts
 var router6 = Router6();
+router6.get(
+  "/:userId",
+  auth_default(
+    "STUDENT" /* STUDENT */,
+    "TUTOR" /* TUTOR */,
+    "ADMIN" /* ADMIN */,
+    "SUPER_ADMIN" /* SUPER_ADMIN */,
+    "MANAGER" /* MANAGER */,
+    "ORGANIZER" /* ORGANIZER */
+  ),
+  StudentProfileController.GetUserProfile
+);
 router6.patch(
   "/:studentId",
   auth_default(
@@ -2225,14 +2344,14 @@ var CookieUtils = {
 };
 
 // src/app/utils/jwt.ts
-import jwt from "jsonwebtoken";
+import jwt2 from "jsonwebtoken";
 var createToken = (payload, secret, { expiresIn }) => {
-  const token = jwt.sign(payload, secret, { expiresIn });
+  const token = jwt2.sign(payload, secret, { expiresIn });
   return token;
 };
 var verifyToken = (token, secret) => {
   try {
-    const decoded = jwt.verify(token, secret);
+    const decoded = jwt2.verify(token, secret);
     return {
       success: true,
       data: decoded
@@ -2246,7 +2365,7 @@ var verifyToken = (token, secret) => {
   }
 };
 var decodeToken = (token) => {
-  const decoded = jwt.decode(token);
+  const decoded = jwt2.decode(token);
   return decoded;
 };
 var jwtUtils = {
@@ -2380,7 +2499,7 @@ var Register = catchAsync(async (req, res) => {
   const refreshToken = tokenUtils.getRefreshToken(jwtPayload);
   tokenUtils.setAccessTokenCookie(res, accessToken);
   tokenUtils.setRefreshTokenCookie(res, refreshToken);
-  tokenUtils.setBetterAuthSessionCookie(res, token);
+  tokenUtils.setBetterAuthSessionCookie(res, token ?? "");
   return res.status(201).json({
     success: true,
     message: "Registration successful",

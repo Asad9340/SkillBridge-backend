@@ -3,6 +3,18 @@ import { catchAsync } from '../../utils/catchAsync';
 import { StudentProfileService } from './user-profile.service';
 import { uploadFileToCloudinary } from '../../app/config/cloudinary.config';
 
+const GetUserProfile = catchAsync(async (req: Request, res: Response) => {
+  const userId = req.params.userId as string;
+  const result = await StudentProfileService.GetUserProfile(userId);
+  if (!result) {
+    res.status(404).json({ success: false, message: 'User not found' });
+    return;
+  }
+  res
+    .status(200)
+    .json({ success: true, message: 'User profile retrieved', data: result });
+});
+
 const UpdateStudentProfile = catchAsync(async (req: Request, res: Response) => {
   const studentId = req.params.studentId;
   const profilePayload = req.body;
@@ -51,6 +63,7 @@ const UploadStudentAvatar = catchAsync(async (req: Request, res: Response) => {
 });
 
 export const StudentProfileController = {
+  GetUserProfile,
   UpdateStudentProfile,
   UploadStudentAvatar,
 };

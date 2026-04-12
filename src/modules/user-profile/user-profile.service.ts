@@ -1,5 +1,24 @@
-
 import { prisma } from '../../../lib/prisma';
+
+const GetUserProfile = async (userId: string) => {
+  return prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      image: true,
+      role: true,
+      status: true,
+      emailVerified: true,
+      phone: true,
+      bio: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+};
+
 type UpdateStudentProfilePayload = {
   name?: string;
   image?: string;
@@ -27,5 +46,6 @@ const UpdateStudentProfile = async (
 };
 
 export const StudentProfileService = {
+  GetUserProfile,
   UpdateStudentProfile,
 };
