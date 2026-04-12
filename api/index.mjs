@@ -330,6 +330,7 @@ var auth = betterAuth({
           return {
             data: {
               ...user,
+              role: Role.STUDENT,
               emailVerified: true
             }
           };
