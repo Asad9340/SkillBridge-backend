@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { catchAsync } from '../../utils/catchAsync';
 import { auth as betterAuth } from '../../app/lib/auth';
 import { tokenUtils } from '../../app/utils/token';
+import { envVars } from '../../app/config/env.config';
 
 /**
  * POST /api/v1/auth/login
@@ -203,9 +204,108 @@ const RefreshToken = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+/**
+ * GET /api/v1/auth/login/google
+ * Renders a page that client-side POSTs to BetterAuth's social sign-in endpoint.
+ * This is necessary because BetterAuth's /sign-in/social only accepts POST.
+ * The callbackURL is set to the backend /google/success handler so that the
+ * BetterAuth session cookie (set on the backend domain) can be read and
+ * exchanged for custom JWT tokens before redirecting to the frontend.
+ */
+const LoginWithGoogle = catchAsync(async (req: Request, res: Response) => {
+  // Support both ?redirect=/path (path only) and ?callbackURL=https://... (full URL)
+  let redirectPath = '/dashboard';
+  if (typeof req.query.redirect === 'string' && req.query.redirect) {
+    redirectPath = req.query.redirect;
+  } else if (
+    typeof req.query.callbackURL === 'string' &&
+    req.query.callbackURL
+  ) {
+    try {
+      const parsed = new URL(req.query.callbackURL);
+      redirectPath = parsed.pathname + (parsed.search || '');
+    } catch {
+      redirectPath = '/dashboard';
+    }
+  }
+
+  const betterAuthBaseUrl = envVars.BETTER_AUTH_URL.replace(/\/$/, '');
+  // After OAuth, BetterAuth will redirect the browser to this BACKEND URL so
+  // we can read the session cookie (which is scoped to the backend domain).
+  const callbackURL = `${betterAuthBaseUrl}/api/v1/auth/google/success?redirect=${encodeURIComponent(redirectPath)}`;
+
+  return res.render('googleRedirect', {
+    callbackURL,
+    betterAuthUrl: betterAuthBaseUrl,
+  });
+});
+
+/**
+ * GET /api/v1/auth/google/success
+ * Called by BetterAuth after a successful Google OAuth flow.
+ * Reads the BetterAuth session cookie, mints custom JWT access/refresh tokens,
+ * then hands them off to the frontend via a redirect to its callback route.
+ */
+const GoogleLoginSuccess = catchAsync(async (req: Request, res: Response) => {
+  const redirectPath = (req.query.redirect as string) || '/dashboard';
+
+  const sessionToken = req.cookies['better-auth.session_token'];
+
+  if (!sessionToken) {
+    return res.redirect(`${envVars.FRONTEND_URL}/login?error=oauth_failed`);
+  }
+
+  const session = await betterAuth.api.getSession({
+    headers: new Headers({
+      Cookie: `better-auth.session_token=${sessionToken}`,
+    }),
+  });
+
+  if (!session?.user) {
+    return res.redirect(`${envVars.FRONTEND_URL}/login?error=no_session_found`);
+  }
+
+  const jwtPayload = {
+    userId: session.user.id,
+    email: session.user.email,
+    name: session.user.name,
+    role: (session.user as any).role,
+    emailVerified: session.user.emailVerified,
+  };
+
+  const accessToken = tokenUtils.getAccessToken(jwtPayload);
+  const refreshToken = tokenUtils.getRefreshToken(jwtPayload);
+
+  const isValidRedirectPath =
+    redirectPath.startsWith('/') && !redirectPath.startsWith('//');
+  const finalRedirectPath = isValidRedirectPath ? redirectPath : '/dashboard';
+
+  const callbackUrl = new URL(
+    `${envVars.FRONTEND_URL}/api/auth/google/callback`,
+  );
+  callbackUrl.searchParams.set('accessToken', accessToken);
+  callbackUrl.searchParams.set('refreshToken', refreshToken);
+  callbackUrl.searchParams.set('sessionToken', sessionToken);
+  callbackUrl.searchParams.set('redirect', finalRedirectPath);
+
+  return res.redirect(callbackUrl.toString());
+});
+
+/**
+ * GET /api/v1/auth/oauth/error
+ * Generic OAuth error handler — redirects to the frontend login page.
+ */
+const HandleOAuthError = catchAsync((req: Request, res: Response) => {
+  const error = (req.query.error as string) || 'oauth_failed';
+  return res.redirect(`${envVars.FRONTEND_URL}/login?error=${error}`);
+});
+
 export const AuthController = {
   Login,
   Register,
   GetMe,
   RefreshToken,
+  LoginWithGoogle,
+  GoogleLoginSuccess,
+  HandleOAuthError,
 };

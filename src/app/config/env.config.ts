@@ -107,9 +107,9 @@ export const envVars: EnvConfig & { IS_PRODUCTION: boolean } = {
       'no-reply@skillbridge.local',
   },
   CLOUDINARY: {
-    CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME || '',
-    CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY || '',
-    CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET || '',
+    CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME?.trim() || '',
+    CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY?.trim() || '',
+    CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET?.trim() || '',
   },
   OPENROUTER: {
     API_KEY: process.env.OPENROUTER_API_KEY?.trim() || '',

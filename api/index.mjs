@@ -84,9 +84,9 @@ var envVars = {
     SMTP_FROM: process.env.EMAIL_SENDER_SMTP_FROM || process.env.NODEMAILER_GMAIL || "no-reply@skillbridge.local"
   },
   CLOUDINARY: {
-    CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME || "",
-    CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY || "",
-    CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET || ""
+    CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME?.trim() || "",
+    CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY?.trim() || "",
+    CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET?.trim() || ""
   },
   OPENROUTER: {
     API_KEY: process.env.OPENROUTER_API_KEY?.trim() || "",
@@ -2580,16 +2580,79 @@ var RefreshToken = catchAsync(async (req, res) => {
     data: { accessToken, refreshToken }
   });
 });
+var LoginWithGoogle = catchAsync(async (req, res) => {
+  let redirectPath = "/dashboard";
+  if (typeof req.query.redirect === "string" && req.query.redirect) {
+    redirectPath = req.query.redirect;
+  } else if (typeof req.query.callbackURL === "string" && req.query.callbackURL) {
+    try {
+      const parsed = new URL(req.query.callbackURL);
+      redirectPath = parsed.pathname + (parsed.search || "");
+    } catch {
+      redirectPath = "/dashboard";
+    }
+  }
+  const betterAuthBaseUrl = envVars.BETTER_AUTH_URL.replace(/\/$/, "");
+  const callbackURL = `${betterAuthBaseUrl}/api/v1/auth/google/success?redirect=${encodeURIComponent(redirectPath)}`;
+  return res.render("googleRedirect", {
+    callbackURL,
+    betterAuthUrl: betterAuthBaseUrl
+  });
+});
+var GoogleLoginSuccess = catchAsync(async (req, res) => {
+  const redirectPath = req.query.redirect || "/dashboard";
+  const sessionToken = req.cookies["better-auth.session_token"];
+  if (!sessionToken) {
+    return res.redirect(`${envVars.FRONTEND_URL}/login?error=oauth_failed`);
+  }
+  const session = await auth.api.getSession({
+    headers: new Headers({
+      Cookie: `better-auth.session_token=${sessionToken}`
+    })
+  });
+  if (!session?.user) {
+    return res.redirect(`${envVars.FRONTEND_URL}/login?error=no_session_found`);
+  }
+  const jwtPayload = {
+    userId: session.user.id,
+    email: session.user.email,
+    name: session.user.name,
+    role: session.user.role,
+    emailVerified: session.user.emailVerified
+  };
+  const accessToken = tokenUtils.getAccessToken(jwtPayload);
+  const refreshToken = tokenUtils.getRefreshToken(jwtPayload);
+  const isValidRedirectPath = redirectPath.startsWith("/") && !redirectPath.startsWith("//");
+  const finalRedirectPath = isValidRedirectPath ? redirectPath : "/dashboard";
+  const callbackUrl = new URL(
+    `${envVars.FRONTEND_URL}/api/auth/google/callback`
+  );
+  callbackUrl.searchParams.set("accessToken", accessToken);
+  callbackUrl.searchParams.set("refreshToken", refreshToken);
+  callbackUrl.searchParams.set("sessionToken", sessionToken);
+  callbackUrl.searchParams.set("redirect", finalRedirectPath);
+  return res.redirect(callbackUrl.toString());
+});
+var HandleOAuthError = catchAsync((req, res) => {
+  const error = req.query.error || "oauth_failed";
+  return res.redirect(`${envVars.FRONTEND_URL}/login?error=${error}`);
+});
 var AuthController = {
   Login,
   Register,
   GetMe,
-  RefreshToken
+  RefreshToken,
+  LoginWithGoogle,
+  GoogleLoginSuccess,
+  HandleOAuthError
 };
 
 // src/modules/auth/auth.route.ts
 var router12 = Router12();
 router12.post("/login", AuthController.Login);
+router12.get("/login/google", AuthController.LoginWithGoogle);
+router12.get("/google/success", AuthController.GoogleLoginSuccess);
+router12.get("/oauth/error", AuthController.HandleOAuthError);
 router12.post("/register", AuthController.Register);
 router12.get("/me", AuthController.GetMe);
 router12.post("/refresh-token", AuthController.RefreshToken);
